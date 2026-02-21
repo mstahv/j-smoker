@@ -32,12 +32,22 @@ public class SmokerHardware {
 
     static int FAN_GPIO = 25;
 
+    // Software PWM for blower
+    private static final long BLOWER_CYCLE_MS = 10_000; // 10 second full cycle
+    private static final long BLOWER_MIN_PULSE_MS = 300; // minimum on-time
+
     private Context pi4j;
 
     private Servo servo;
     private DigitalOutput fanOutput;
     private Mcp9600 mcp9600;
     private boolean hardwareAvailable;
+
+    // Blower state
+    private boolean blowerForceOn;
+    private boolean blowerSoftPwmEnabled;
+    private int blowerDutyPercent; // 1-100
+    private long blowerCycleStart;
 
     public record TemperatureReading(Instant timestamp, double temperature) {}
 
@@ -72,12 +82,85 @@ public class SmokerHardware {
 
     @Scheduled(every = "5s")
     void readTemperatures() {
-        System.out.println("Reading temperatures...");
         Instant now = Instant.now();
         double probe = hardwareAvailable ? mcp9600.getHotJunctionTemperature() : 225.0 + Math.random() * 10 - 5;
         double chip = hardwareAvailable ? mcp9600.getColdJunctionTemperature() : 42.0 + Math.random() * 2 - 1;
         addReading(PROBE, new TemperatureReading(now, probe));
         addReading(CHIP, new TemperatureReading(now, chip));
+    }
+
+    @Scheduled(every = "0.1s")
+    void blowerSoftPwmTick() {
+        if (!hardwareAvailable || !blowerSoftPwmEnabled) return;
+
+        long now = System.currentTimeMillis();
+        long elapsed = now - blowerCycleStart;
+        if (elapsed >= BLOWER_CYCLE_MS) {
+            blowerCycleStart = now;
+            elapsed = 0;
+        }
+
+        long onTimeMs = BLOWER_CYCLE_MS * blowerDutyPercent / 100;
+        if (onTimeMs < BLOWER_MIN_PULSE_MS) {
+            // Below minimum pulse: stay off the entire cycle
+            fanOutput.off();
+        } else {
+            if (elapsed < onTimeMs) {
+                fanOutput.on();
+            } else {
+                fanOutput.off();
+            }
+        }
+    }
+
+    /**
+     * Force the blower fully on or off. Disables software PWM.
+     */
+    public void setBlower(boolean on) {
+        blowerSoftPwmEnabled = false;
+        blowerForceOn = on;
+        if (!hardwareAvailable) return;
+        if (on) {
+            fanOutput.on();
+        } else {
+            fanOutput.off();
+        }
+    }
+
+    /**
+     * Enable software PWM for the blower at the given duty cycle (1-100%).
+     */
+    public void setBlowerDuty(int percent) {
+        if (percent < 1 || percent > 100) {
+            throw new IllegalArgumentException("Blower duty must be 1-100%, got: " + percent);
+        }
+        blowerForceOn = false;
+        blowerDutyPercent = percent;
+        if (!blowerSoftPwmEnabled) {
+            blowerCycleStart = System.currentTimeMillis();
+            blowerSoftPwmEnabled = true;
+        }
+    }
+
+    /**
+     * Disable the blower entirely (both force and soft PWM).
+     */
+    public void disableBlower() {
+        blowerSoftPwmEnabled = false;
+        blowerForceOn = false;
+        if (hardwareAvailable) fanOutput.off();
+    }
+
+    public boolean isBlowerSoftPwmEnabled() {
+        return blowerSoftPwmEnabled;
+    }
+
+    public int getBlowerDutyPercent() {
+        return blowerDutyPercent;
+    }
+
+    public boolean isBlowerForceOn() {
+        return blowerForceOn;
     }
 
     private void prefillDummyHistory() {
@@ -117,6 +200,7 @@ public class SmokerHardware {
                 LOG.log(Level.WARNING, "Failed to clean up servo", e);
             }
         }
+        if (fanOutput != null) fanOutput.off();
         if (mcp9600 != null) mcp9600.close();
         if (pi4j != null) pi4j.shutdown();
     }
@@ -132,20 +216,11 @@ public class SmokerHardware {
         if (percent < 0 || percent > 100) {
             throw new IllegalArgumentException("Throttle must be 0-100%, got: " + percent);
         }
-        double angle = THROTTLE_MIN_ANGLE + percent / 100.0 * (THROTTLE_MAX_ANGLE - THROTTLE_MIN_ANGLE);
+        double angle = THROTTLE_MAX_ANGLE - percent / 100.0 * (THROTTLE_MAX_ANGLE - THROTTLE_MIN_ANGLE);
         try {
             servo.setAngle(angle);
         } catch (IOException e) {
             throw new RuntimeException(e);
-        }
-    }
-
-    public void setBlower(boolean on) {
-        if (!hardwareAvailable) return;
-        if (on) {
-            fanOutput.on();
-        } else {
-            fanOutput.off();
         }
     }
 
