@@ -168,7 +168,7 @@ The web interface is built with **Vaadin** and accessible at `http://<raspberry-
 
 ## Project Structure
 
-The repository contains two modules:
+The repository contains three modules:
 
 ### `j-smoker/` — Main Application
 
@@ -180,7 +180,7 @@ A standalone, reusable Java library for the [MCP9600](https://www.microchip.com/
 
 ### `pwmchip/` — Linux sysfs PWM Library
 
-A standalone, zero-dependency Java library for controlling hardware PWM channels via Linux sysfs (`/sys/class/pwm/`). Useful for servo motors and other PWM-controlled devices on any Linux board with hardware PWM — no Pi4J required.
+A standalone, zero-dependency Java library for controlling hardware PWM channels via Linux sysfs (`/sys/class/pwm/`). Includes an abstract `Servo` base class and a ready-made `Sg90Servo` implementation. Works on any Linux board with hardware PWM — no Pi4J required. See [`pwmchip/README.md`](pwmchip/README.md) for API details.
 
 ## 🔌 Hardware Setup
 

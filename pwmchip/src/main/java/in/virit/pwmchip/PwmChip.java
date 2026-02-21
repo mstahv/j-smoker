@@ -9,14 +9,6 @@ import java.nio.file.Paths;
  * Low-level Java API for controlling hardware PWM channels by directly writing to sysfs files.
  * This class provides direct access to PWM chip functionality without using Pi4J, but with a
  * more fine-grained API suitable for controlling e.g. servo motors.
- *
- * Based on the bash script that was originally in this file:
- *   cd /sys/class/pwm/pwmchip0
- *   echo 0 > export
- *   sleep 0.1
- *   echo 10000000 > pwm0/period
- *   echo 5000000 > pwm0/duty_cycle
- *   echo 1 > pwm0/enable
  */
 public class PwmChip {
 

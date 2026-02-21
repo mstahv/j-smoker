@@ -5,6 +5,8 @@ import com.pi4j.context.Context;
 import com.pi4j.io.gpio.digital.DigitalOutput;
 import in.virit.mcp9600.Mcp9600;
 import in.virit.pwmchip.PwmChip;
+import in.virit.pwmchip.Servo;
+import in.virit.pwmchip.Sg90Servo;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -29,13 +31,10 @@ public class SmokerHardware {
     public static final String CHIP = "Chip";
 
     static int FAN_GPIO = 25;
-    static int HZ_50 = 50;
 
     private Context pi4j;
 
-    final double dutyCycle0 = 0.5;
-    final double dutyCycle180 = 2.4;
-    private PwmChip pwmChip;
+    private Servo servo;
     private DigitalOutput fanOutput;
     private Mcp9600 mcp9600;
     private boolean hardwareAvailable;
@@ -58,11 +57,8 @@ public class SmokerHardware {
         try {
             pi4j = Pi4J.newAutoContext();
 
-            pwmChip = new PwmChip(0, 0);
-            pwmChip.export();
-            pwmChip.setPeriodMs(1000 / HZ_50);
-            pwmChip.setDutyCycleMs(dutyCycle0);
-            pwmChip.enable();
+            servo = new Sg90Servo(new PwmChip(0, 0));
+            servo.init();
 
             fanOutput = pi4j.digitalOutput().create(FAN_GPIO);
 
@@ -114,12 +110,11 @@ public class SmokerHardware {
 
     @PreDestroy
     void cleanup() {
-        if (pwmChip != null) {
+        if (servo != null) {
             try {
-                pwmChip.disable();
-                pwmChip.unexport();
+                servo.shutdown();
             } catch (IOException e) {
-                LOG.log(Level.WARNING, "Failed to clean up PWM", e);
+                LOG.log(Level.WARNING, "Failed to clean up servo", e);
             }
         }
         if (mcp9600 != null) mcp9600.close();
@@ -128,16 +123,8 @@ public class SmokerHardware {
 
     public void setServoAngle(double servoAngle) {
         if (!hardwareAvailable) return;
-        if (servoAngle < 0 || servoAngle > 180) {
-            throw new IllegalArgumentException("0-180° only");
-        }
         try {
-            pwmChip.export();
-            pwmChip.setPeriodMs(1000 / HZ_50);
-            double dutyCycleMs = dutyCycle0 + servoAngle / 180 * (dutyCycle180 - dutyCycle0);
-            pwmChip.setDutyCycleMs(dutyCycleMs);
-            System.out.println(dutyCycleMs + " " + pwmChip.getPeriodMs());
-            pwmChip.enable();
+            servo.setAngle(servoAngle);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
