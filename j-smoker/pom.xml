@@ -83,6 +83,11 @@
             <artifactId>pwmchip</artifactId>
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
+        <dependency>
+            <groupId>in.virit</groupId>
+            <artifactId>ibbq</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
 
         <!-- include Pi4J Core -->
         <dependency>

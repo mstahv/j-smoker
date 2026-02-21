@@ -182,6 +182,10 @@ A standalone, reusable Java library for the [MCP9600](https://www.microchip.com/
 
 A standalone, zero-dependency Java library for controlling hardware PWM channels via Linux sysfs (`/sys/class/pwm/`). Includes an abstract `Servo` base class and a ready-made `Sg90Servo` implementation. Works on any Linux board with hardware PWM — no Pi4J required. See [`pwmchip/README.md`](pwmchip/README.md) for API details.
 
+### `ibbq/` — iBBQ BLE Thermometer Library
+
+A standalone Java library for connecting to iBBQ-protocol BLE thermometers and streaming temperature data. Built on [bluez-dbus](https://github.com/hypfvieh/bluez-dbus) (Maven Central, no custom repositories). Tested with a KOBE "xBBQ" 2-probe wireless thermometer on Raspberry Pi. See [`ibbq/README.md`](ibbq/README.md) for API details and usage examples.
+
 ## 🔌 Hardware Setup
 
 ### Servo Motor Connection
