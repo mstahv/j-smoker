@@ -1,40 +1,21 @@
 package in.virit;
 
-import com.vaadin.flow.component.checkbox.Checkbox;
-import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.Paragraph;
+import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.component.textfield.IntegerField;
-import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.Route;
+import org.vaadin.firitin.appframework.MenuItem;
 
 @Route
+@MenuItem(order = MenuItem.BEGINNING, icon = VaadinIcon.HOME, title = "J-Smoker")
 public class MainView extends VerticalLayout {
     public MainView(SmokerHardware smokerHardware) {
-        add("It works!?");
-        add(smokerHardware.boardName());
-
-        var value = new Span();
-
-        IntegerField integerField = new IntegerField();
-        integerField.setMin(20);
-        integerField.setMax(75);
-        integerField.setStep(2);
-        integerField.setStepButtonsVisible(true);
-        integerField.setValueChangeMode(ValueChangeMode.EAGER);
-        integerField.addValueChangeListener(e -> {
-            value.setText("" + e.getValue() + "°");
-            smokerHardware.setServoAngle(e.getValue());
-        });
-        integerField.setValue(20);
-
-        add(integerField);
-        add(value);
-
-        Checkbox fan = new Checkbox("Fan");
-        fan.addValueChangeListener(event -> {
-            smokerHardware.setFan(event.getValue());
-        });
-
-        add(fan);
+        add(new Paragraph(
+                "Raspberry Pi-based smoker control system. "
+                + "Monitor burning chamber and chip temperatures with live gauges, "
+                + "and control airflow via the throttle valve and blower."
+        ));
+        add(new Paragraph("Running on: " + smokerHardware.boardName()));
     }
 }

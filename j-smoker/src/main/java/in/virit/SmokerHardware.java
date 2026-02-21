@@ -121,16 +121,26 @@ public class SmokerHardware {
         if (pi4j != null) pi4j.shutdown();
     }
 
-    public void setServoAngle(double servoAngle) {
+    private static final double THROTTLE_MIN_ANGLE = 20;
+    private static final double THROTTLE_MAX_ANGLE = 75;
+
+    /**
+     * Sets the throttle position as a percentage (0 = closed, 100 = fully open).
+     */
+    public void setThrottle(int percent) {
         if (!hardwareAvailable) return;
+        if (percent < 0 || percent > 100) {
+            throw new IllegalArgumentException("Throttle must be 0-100%, got: " + percent);
+        }
+        double angle = THROTTLE_MIN_ANGLE + percent / 100.0 * (THROTTLE_MAX_ANGLE - THROTTLE_MIN_ANGLE);
         try {
-            servo.setAngle(servoAngle);
+            servo.setAngle(angle);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public void setFan(boolean on) {
+    public void setBlower(boolean on) {
         if (!hardwareAvailable) return;
         if (on) {
             fanOutput.on();
