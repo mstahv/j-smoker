@@ -166,26 +166,21 @@ The web interface is built with **Vaadin** and accessible at `http://<raspberry-
 - Historical data visualization and export
 - Responsive design that works on desktop and mobile devices
 
-## 📂 Project Structure
+## Project Structure
 
-```
-src/
-├── main/
-│   ├── java/com/jsmoker/
-│   │   ├── control/          # Control algorithms and logic
-│   │   ├── hardware/         # Hardware interface classes
-│   │   ├── sensors/          # Sensor reading and processing
-│   │   ├── model/            # Data models and DTOs
-│   │   ├── service/          # Business logic services
-│   │   ├── web/              # Quarkus REST endpoints and Vaadin UI
-│   │   └── Main.java          # Quarkus application entry point
-│   ├── resources/
-│   │   ├── application.properties  # Quarkus configuration
-│   │   ├── META-INF/          # Quarkus native build config
-│   │   └── templates/        # Web templates
-│   └── docker/               # Container configuration
-└── test/                     # Unit and integration tests
-```
+The repository contains two modules:
+
+### `j-smoker/` — Main Application
+
+Quarkus + Vaadin web application that runs on the Raspberry Pi. Provides a web UI for controlling the smoker (servo, fan) and monitoring temperatures with live-updating gauges and sparkline charts.
+
+### `mcp9600/` — MCP9600 Java Library
+
+A standalone, reusable Java library for the [MCP9600](https://www.microchip.com/en-us/product/mcp9600) thermocouple amplifier over I2C, built on Pi4J 4.0.0. Can be used independently in any Pi4J project. See [`mcp9600/README.md`](mcp9600/README.md) for API details and usage examples.
+
+### `pwmchip/` — Linux sysfs PWM Library
+
+A standalone, zero-dependency Java library for controlling hardware PWM channels via Linux sysfs (`/sys/class/pwm/`). Useful for servo motors and other PWM-controlled devices on any Linux board with hardware PWM — no Pi4J required.
 
 ## 🔌 Hardware Setup
 
