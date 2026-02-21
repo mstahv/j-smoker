@@ -1,7 +1,6 @@
 package in.virit;
 
 import com.vaadin.flow.component.checkbox.Checkbox;
-import com.vaadin.flow.component.html.RangeInput;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.IntegerField;
@@ -31,17 +30,11 @@ public class MainView extends VerticalLayout {
         add(integerField);
         add(value);
 
-
         Checkbox fan = new Checkbox("Fan");
         fan.addValueChangeListener(event -> {
             smokerHardware.setFan(event.getValue());
         });
 
         add(fan);
-
-
-
-
-
     }
 }
