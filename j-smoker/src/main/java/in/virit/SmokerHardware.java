@@ -3,6 +3,9 @@ package in.virit;
 import com.pi4j.Pi4J;
 import com.pi4j.context.Context;
 import com.pi4j.io.gpio.digital.DigitalOutput;
+import in.virit.ibbq.IBBQListener;
+import in.virit.ibbq.IBBQThermometer;
+import in.virit.ibbq.TemperatureUpdate;
 import in.virit.mcp9600.Mcp9600;
 import in.virit.pwmchip.PwmChip;
 import in.virit.pwmchip.Servo;
@@ -29,6 +32,10 @@ public class SmokerHardware {
 
     public static final String PROBE = "Probe";
     public static final String CHIP = "Chip";
+    public static final String IBBQ_1 = "iBBQ 1 (chamber)";
+    public static final String IBBQ_2 = "iBBQ 2 (food)";
+    public static final String IBBQ_3 = "iBBQ 3 (food)";
+    private static final String[] IBBQ_KEYS = {IBBQ_1, IBBQ_2, IBBQ_3};
 
     static int FAN_GPIO = 25;
 
@@ -42,6 +49,11 @@ public class SmokerHardware {
     private DigitalOutput fanOutput;
     private Mcp9600 mcp9600;
     private boolean hardwareAvailable;
+    private boolean devMode;
+
+    private IBBQThermometer ibbqThermometer;
+    private boolean ibbqAvailable;
+    private boolean ibbqConnectionAttempted;
 
     // Blower state
     private boolean blowerForceOn;
@@ -57,9 +69,13 @@ public class SmokerHardware {
     void init() {
         history.put(PROBE, new CopyOnWriteArrayList<>());
         history.put(CHIP, new CopyOnWriteArrayList<>());
+        history.put(IBBQ_1, new CopyOnWriteArrayList<>());
+        history.put(IBBQ_2, new CopyOnWriteArrayList<>());
+        history.put(IBBQ_3, new CopyOnWriteArrayList<>());
 
         if (!new java.io.File("/dev/i2c-1").exists()) {
-            LOG.info("Hardware not detected, running in UI-only mode");
+            LOG.info("Hardware not detected, running in UI-only mode with fake data");
+            devMode = true;
             prefillDummyHistory();
             return;
         }
@@ -78,15 +94,23 @@ public class SmokerHardware {
         } catch (Exception e) {
             LOG.log(Level.WARNING, "Hardware init failed, running in UI-only mode", e);
         }
+
+        Thread.ofVirtual().name("ibbq-connect").start(this::connectIbbq);
     }
 
     @Scheduled(every = "5s")
     void readTemperatures() {
         Instant now = Instant.now();
-        double probe = hardwareAvailable ? mcp9600.getHotJunctionTemperature() : 225.0 + Math.random() * 10 - 5;
-        double chip = hardwareAvailable ? mcp9600.getColdJunctionTemperature() : 42.0 + Math.random() * 2 - 1;
-        addReading(PROBE, new TemperatureReading(now, probe));
-        addReading(CHIP, new TemperatureReading(now, chip));
+        if (hardwareAvailable) {
+            addReading(PROBE, new TemperatureReading(now, mcp9600.getHotJunctionTemperature()));
+            addReading(CHIP, new TemperatureReading(now, mcp9600.getColdJunctionTemperature()));
+        } else if (devMode) {
+            addReading(PROBE, new TemperatureReading(now, 225.0 + Math.random() * 10 - 5));
+            addReading(CHIP, new TemperatureReading(now, 42.0 + Math.random() * 2 - 1));
+            addReading(IBBQ_1, new TemperatureReading(now, 180.0 + Math.random() * 10 - 5));
+            addReading(IBBQ_2, new TemperatureReading(now, 72.0 + Math.random() * 4 - 2));
+            addReading(IBBQ_3, new TemperatureReading(now, 68.0 + Math.random() * 4 - 2));
+        }
     }
 
     @Scheduled(every = "0.1s")
@@ -163,12 +187,50 @@ public class SmokerHardware {
         return blowerForceOn;
     }
 
+    public boolean isDevMode() {
+        return devMode;
+    }
+
+    public boolean isIbbqAvailable() {
+        return ibbqAvailable;
+    }
+
+    public boolean isIbbqConnectionAttempted() {
+        return ibbqConnectionAttempted;
+    }
+
+    private void connectIbbq() {
+        try {
+            ibbqThermometer = IBBQThermometer.scan(10);
+            ibbqThermometer.addListener(new IBBQListener() {
+                @Override
+                public void onTemperatureUpdate(TemperatureUpdate update) {
+                    for (var probe : update.probes()) {
+                        if (probe.channel() < IBBQ_KEYS.length && probe.isConnected()) {
+                            addReading(IBBQ_KEYS[probe.channel()],
+                                    new TemperatureReading(update.timestamp(), probe.temperatureCelsius()));
+                        }
+                    }
+                }
+            });
+            ibbqAvailable = true;
+            LOG.info("iBBQ thermometer connected");
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "iBBQ thermometer not found", e);
+        } finally {
+            ibbqConnectionAttempted = true;
+        }
+    }
+
     private void prefillDummyHistory() {
         Instant now = Instant.now();
         for (int i = MAX_HISTORY; i > 0; i--) {
             Instant ts = now.minusSeconds(i * 5L);
             addReading(PROBE, new TemperatureReading(ts, 220.0 + Math.random() * 15 - 7.5));
             addReading(CHIP, new TemperatureReading(ts, 40.0 + Math.random() * 5 - 2.5));
+            addReading(IBBQ_1, new TemperatureReading(ts, 175.0 + Math.random() * 15 - 7.5));
+            addReading(IBBQ_2, new TemperatureReading(ts, 70.0 + Math.random() * 8 - 4));
+            addReading(IBBQ_3, new TemperatureReading(ts, 65.0 + Math.random() * 8 - 4));
         }
     }
 
@@ -200,6 +262,7 @@ public class SmokerHardware {
                 LOG.log(Level.WARNING, "Failed to clean up servo", e);
             }
         }
+        if (ibbqThermometer != null) ibbqThermometer.close();
         if (fanOutput != null) fanOutput.off();
         if (mcp9600 != null) mcp9600.close();
         if (pi4j != null) pi4j.shutdown();

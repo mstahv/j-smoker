@@ -2,20 +2,20 @@ package in.virit;
 
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.DetachEvent;
-import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.Route;
 import in.virit.SmokerHardware.TemperatureReading;
 import org.vaadin.firitin.appframework.MenuItem;
 import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
+import org.vaadin.firitin.layouts.HorizontalFloatLayout;
+import org.vaadin.firitin.util.style.LumoProps;
 import org.vaadin.svgvis.SvgSparkLine;
 import org.vaadin.svgvis.SvgSparkLine.DataPoint;
 
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Route
@@ -26,16 +26,24 @@ public class ThermometersView extends VVerticalLayout {
     private final UiRefresher uiRefresher;
     private final ProbeDisplay probeDisplay;
     private final ProbeDisplay chipDisplay;
+    private final ProbeDisplay ibbq1Display;
+    private final ProbeDisplay ibbq2Display;
+    private final ProbeDisplay ibbq3Display;
+    private final WarningMessage ibbqWarning = new WarningMessage("");
 
     public ThermometersView(SmokerHardware smokerHardware, UiRefresher uiRefresher) {
         this.smokerHardware = smokerHardware;
         this.uiRefresher = uiRefresher;
 
-        probeDisplay = new ProbeDisplay("Probe", -10, 600);
+        probeDisplay = new ProbeDisplay("Fire chamber probe", -10, 600);
         chipDisplay = new ProbeDisplay("Chip", -10, 80);
+        ibbq1Display = new ProbeDisplay("iBBQ 1 (food chamber)", -10, 250);
+        ibbq2Display = new ProbeDisplay("iBBQ 2 (food 1)", 0, 120);
+        ibbq3Display = new ProbeDisplay("iBBQ 3 (food 2)", 0, 120);
 
-        add(new Button(VaadinIcon.REFRESH.create(), e -> updateReadings()));
-        add(new HorizontalLayout(probeDisplay, chipDisplay));
+        add(ibbqWarning);
+        var displays = new FormLayout(ibbq1Display, ibbq2Display, ibbq3Display,probeDisplay, chipDisplay);
+        add(displays);
 
         updateReadings();
     }
@@ -43,10 +51,29 @@ public class ThermometersView extends VVerticalLayout {
     private void updateReadings() {
         probeDisplay.update(smokerHardware.getHistory(SmokerHardware.PROBE));
         chipDisplay.update(smokerHardware.getHistory(SmokerHardware.CHIP));
+        ibbq1Display.update(smokerHardware.getHistory(SmokerHardware.IBBQ_1));
+        ibbq2Display.update(smokerHardware.getHistory(SmokerHardware.IBBQ_2));
+        ibbq3Display.update(smokerHardware.getHistory(SmokerHardware.IBBQ_3));
+        updateIbbqWarning();
+    }
+
+    private void updateIbbqWarning() {
+        if (smokerHardware.isDevMode() || smokerHardware.isIbbqAvailable()) {
+            ibbqWarning.setVisible(false);
+        } else if (!smokerHardware.isIbbqConnectionAttempted()) {
+            ibbqWarning.setText("iBBQ thermometer connecting...");
+            ibbqWarning.setVisible(true);
+        } else {
+            ibbqWarning.setText("iBBQ thermometer not connected — BLE device not found");
+            ibbqWarning.setVisible(true);
+        }
     }
 
     @Override
     protected void onAttach(AttachEvent attachEvent) {
+        if (smokerHardware.isDevMode()) {
+            Notification.show("Running in dev mode — displaying fake data", 5000, Notification.Position.BOTTOM_START);
+        }
         uiRefresher.register(attachEvent.getUI(), this::updateReadings);
     }
 
@@ -56,34 +83,37 @@ public class ThermometersView extends VVerticalLayout {
     }
 
     static class ProbeDisplay extends VerticalLayout {
-        private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss")
-                .withZone(ZoneId.systemDefault());
-
         private final Gauge gauge;
-        private final Span readingLabel = new Span();
-        private final Span timeLabel = new Span();
+        private final RelativeTime timeLabel = new RelativeTime();
         private final SvgSparkLine sparkLine = new SvgSparkLine(300, 80);
+        private final Span notConnected = new Span("Not connected") {{
+            getStyle()
+                    .setColor(LumoProps.SECONDARY_TEXT_COLOR.var())
+                    .set("font-style", "italic");
+        }};
 
         ProbeDisplay(String name, double min, double max) {
             gauge = new Gauge() {{
                 setMinValue(min);
                 setMaxValue(max);
             }};
-            readingLabel.getStyle()
-                    .setFontSize("var(--lumo-font-size-xl)")
-                    .setFontWeight("bold");
-            timeLabel.getStyle()
-                    .setFontSize("var(--lumo-font-size-s)")
-                    .setColor("var(--lumo-secondary-text-color)");
-            add(new Span(name), gauge, readingLabel, timeLabel, sparkLine);
+            timeLabel.getElement().getStyle()
+                    .setFontSize(LumoProps.FONT_SIZE_XS.var())
+                    .setColor(LumoProps.SECONDARY_TEXT_COLOR.var());
+            gauge.setVisible(false);
+            sparkLine.setVisible(false);
+            add(new HorizontalFloatLayout(new Span(name), timeLabel), notConnected, gauge, sparkLine);
         }
 
         void update(List<TemperatureReading> history) {
-            if (history.isEmpty()) return;
+            boolean hasData = !history.isEmpty();
+            notConnected.setVisible(!hasData);
+            gauge.setVisible(hasData);
+            sparkLine.setVisible(hasData);
+            if (!hasData) return;
             TemperatureReading latest = history.getLast();
             gauge.setValue(latest.temperature());
-            readingLabel.setText(String.format("%.1f °C", latest.temperature()));
-            timeLabel.setText(TIME_FMT.format(latest.timestamp()));
+            timeLabel.setDatetime(latest.timestamp());
             sparkLine.setData(history.stream()
                     .map(r -> DataPoint.of(r.timestamp(), r.temperature()))
                     .toList());
