@@ -16,7 +16,9 @@ import org.vaadin.firitin.util.style.LumoProps;
 import org.vaadin.svgvis.SvgSparkLine;
 import org.vaadin.svgvis.SvgSparkLine.DataPoint;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Route
 @MenuItem(icon = VaadinIcon.ALARM)
@@ -30,6 +32,9 @@ public class ThermometersView extends VVerticalLayout {
     private final ProbeDisplay ibbq2Display;
     private final ProbeDisplay ibbq3Display;
     private final WarningMessage ibbqWarning = new WarningMessage("");
+    private final WarningMessage meaterWarning = new WarningMessage("");
+    private final FormLayout displays = new FormLayout();
+    private final Map<String, ProbeDisplay> meaterDisplays = new LinkedHashMap<>();
 
     public ThermometersView(SmokerHardware smokerHardware, UiRefresher uiRefresher) {
         this.smokerHardware = smokerHardware;
@@ -41,8 +46,8 @@ public class ThermometersView extends VVerticalLayout {
         ibbq2Display = new ProbeDisplay("iBBQ 2 (food 1)", 0, 120);
         ibbq3Display = new ProbeDisplay("iBBQ 3 (food 2)", 0, 120);
 
-        add(ibbqWarning);
-        var displays = new FormLayout(ibbq1Display, ibbq2Display, ibbq3Display,probeDisplay, chipDisplay);
+        add(ibbqWarning, meaterWarning);
+        displays.add(ibbq1Display, ibbq2Display, ibbq3Display, probeDisplay, chipDisplay);
         add(displays);
 
         updateReadings();
@@ -55,6 +60,30 @@ public class ThermometersView extends VVerticalLayout {
         ibbq2Display.update(smokerHardware.getHistory(SmokerHardware.IBBQ_2));
         ibbq3Display.update(smokerHardware.getHistory(SmokerHardware.IBBQ_3));
         updateIbbqWarning();
+        updateMeaterDisplays();
+    }
+
+    private void updateMeaterDisplays() {
+        if (smokerHardware.isDevMode() || smokerHardware.isMeaterAvailable()) {
+            meaterWarning.setVisible(false);
+        } else if (!smokerHardware.isMeaterConnectionAttempted()) {
+            meaterWarning.setText("Meater Cloud connecting...");
+            meaterWarning.setVisible(true);
+        } else {
+            meaterWarning.setText("Meater Cloud not connected — check MEATER_EMAIL/MEATER_PASSWORD");
+            meaterWarning.setVisible(true);
+        }
+
+        for (String key : smokerHardware.getMeaterKeys()) {
+            ProbeDisplay display = meaterDisplays.get(key);
+            if (display == null) {
+                boolean isAmbient = key.contains("(ambient)");
+                display = new ProbeDisplay(key, isAmbient ? 0 : 0, isAmbient ? 400 : 120);
+                meaterDisplays.put(key, display);
+                displays.add(display);
+            }
+            display.update(smokerHardware.getHistory(key));
+        }
     }
 
     private void updateIbbqWarning() {

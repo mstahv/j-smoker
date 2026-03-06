@@ -6,6 +6,9 @@ import com.pi4j.io.gpio.digital.DigitalOutput;
 import in.virit.ibbq.IBBQListener;
 import in.virit.ibbq.IBBQThermometer;
 import in.virit.ibbq.TemperatureUpdate;
+import in.virit.meater.cloud.MeaterCloudClient;
+import in.virit.meater.cloud.MeaterCloudListener;
+import in.virit.meater.cloud.MeaterDevice;
 import in.virit.mcp9600.Mcp9600;
 import in.virit.pwmchip.PwmChip;
 import in.virit.pwmchip.Servo;
@@ -14,11 +17,13 @@ import io.quarkus.scheduler.Scheduled;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
@@ -35,6 +40,7 @@ public class SmokerHardware {
     public static final String IBBQ_1 = "iBBQ 1 (chamber)";
     public static final String IBBQ_2 = "iBBQ 2 (food)";
     public static final String IBBQ_3 = "iBBQ 3 (food)";
+    public static final String MEATER_PREFIX = "Meater ";
     private static final String[] IBBQ_KEYS = {IBBQ_1, IBBQ_2, IBBQ_3};
 
     static int FAN_GPIO = 25;
@@ -54,6 +60,15 @@ public class SmokerHardware {
     private IBBQThermometer ibbqThermometer;
     private boolean ibbqAvailable;
     private boolean ibbqConnectionAttempted;
+
+    @ConfigProperty(name = "meater.email")
+    Optional<String> meaterEmail;
+    @ConfigProperty(name = "meater.password")
+    Optional<String> meaterPassword;
+
+    private MeaterCloudClient meaterClient;
+    private boolean meaterAvailable;
+    private boolean meaterConnectionAttempted;
 
     // Blower state
     private boolean blowerForceOn;
@@ -96,6 +111,7 @@ public class SmokerHardware {
         }
 
         Thread.ofVirtual().name("ibbq-connect").start(this::connectIbbq);
+        Thread.ofVirtual().name("meater-connect").start(this::connectMeater);
     }
 
     @Scheduled(every = "5s")
@@ -110,6 +126,8 @@ public class SmokerHardware {
             addReading(IBBQ_1, new TemperatureReading(now, 180.0 + Math.random() * 10 - 5));
             addReading(IBBQ_2, new TemperatureReading(now, 72.0 + Math.random() * 4 - 2));
             addReading(IBBQ_3, new TemperatureReading(now, 68.0 + Math.random() * 4 - 2));
+            addReading(MEATER_PREFIX + "1 (tip)", new TemperatureReading(now, 74.0 + Math.random() * 4 - 2));
+            addReading(MEATER_PREFIX + "1 (ambient)", new TemperatureReading(now, 195.0 + Math.random() * 10 - 5));
         }
     }
 
@@ -199,6 +217,66 @@ public class SmokerHardware {
         return ibbqConnectionAttempted;
     }
 
+    public boolean isMeaterAvailable() {
+        return meaterAvailable;
+    }
+
+    public boolean isMeaterConnectionAttempted() {
+        return meaterConnectionAttempted;
+    }
+
+    /**
+     * Returns all history keys that start with the Meater prefix.
+     */
+    public List<String> getMeaterKeys() {
+        return history.keySet().stream()
+                .filter(k -> k.startsWith(MEATER_PREFIX))
+                .sorted()
+                .toList();
+    }
+
+    private void connectMeater() {
+        String email = meaterEmail.orElse("");
+        String password = meaterPassword.orElse("");
+        if (email.isBlank() || password.isBlank()) {
+            LOG.info("Meater Cloud credentials not configured (set MEATER_EMAIL and MEATER_PASSWORD)");
+            meaterConnectionAttempted = true;
+            return;
+        }
+        try {
+            meaterClient = new MeaterCloudClient();
+            meaterClient.login(email, password);
+            meaterClient.addListener(new MeaterCloudListener() {
+                @Override
+                public void onDevicesUpdated(List<MeaterDevice> devices) {
+                    for (int i = 0; i < devices.size(); i++) {
+                        MeaterDevice dev = devices.get(i);
+                        int num = i + 1;
+                        String tipKey = MEATER_PREFIX + num + " (tip)";
+                        String ambientKey = MEATER_PREFIX + num + " (ambient)";
+                        history.putIfAbsent(tipKey, new CopyOnWriteArrayList<>());
+                        history.putIfAbsent(ambientKey, new CopyOnWriteArrayList<>());
+                        Instant ts = dev.updatedAt();
+                        addReading(tipKey, new TemperatureReading(ts, dev.internalTemperature()));
+                        addReading(ambientKey, new TemperatureReading(ts, dev.ambientTemperature()));
+                    }
+                }
+
+                @Override
+                public void onError(Exception error) {
+                    LOG.log(Level.WARNING, "Meater Cloud poll error", error);
+                }
+            });
+            meaterClient.startPolling(30);
+            meaterAvailable = true;
+            LOG.info("Meater Cloud connected, polling every 30s");
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "Meater Cloud connection failed", e);
+        } finally {
+            meaterConnectionAttempted = true;
+        }
+    }
+
     private void connectIbbq() {
         try {
             ibbqThermometer = IBBQThermometer.scan(10);
@@ -262,6 +340,7 @@ public class SmokerHardware {
                 LOG.log(Level.WARNING, "Failed to clean up servo", e);
             }
         }
+        if (meaterClient != null) meaterClient.close();
         if (ibbqThermometer != null) ibbqThermometer.close();
         if (fanOutput != null) fanOutput.off();
         if (mcp9600 != null) mcp9600.close();
