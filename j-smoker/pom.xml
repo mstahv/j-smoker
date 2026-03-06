@@ -42,7 +42,7 @@
         <dependency>
             <groupId>com.vaadin</groupId>
             <artifactId>vaadin-quarkus-extension</artifactId>
-            <version>25.0.5</version>
+            <version>25.1.0-beta1</version>
         </dependency>
         <dependency>
             <groupId>in.virit</groupId>
@@ -52,12 +52,6 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-hibernate-validator</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>io.github.mstahv</groupId>
-            <artifactId>sliders</artifactId>
-            <version>0.0.5</version>
         </dependency>
         <dependency>
             <groupId>in.virit</groupId>
