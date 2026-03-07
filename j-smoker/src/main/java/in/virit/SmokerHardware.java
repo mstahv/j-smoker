@@ -20,6 +20,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +77,14 @@ public class SmokerHardware {
     private int blowerDutyPercent; // 1-100
     private long blowerCycleStart;
 
+    // Actuator state tracking for auto-control
+    private volatile int currentThrottlePercent;
+    private volatile int currentBlowerPercent;
+    private volatile boolean automaticControlActive;
+
+    // Simulation mode: when enabled, simulateReading() injects values instead of real sensors
+    private volatile boolean simulationMode;
+
     public record TemperatureReading(Instant timestamp, double temperature) {}
 
     private final Map<String, CopyOnWriteArrayList<TemperatureReading>> history = new ConcurrentHashMap<>();
@@ -118,6 +127,7 @@ public class SmokerHardware {
 
     @Scheduled(every = "5s")
     void readTemperatures() {
+        if (simulationMode) return; // Simulation injects readings directly
         Instant now = Instant.now();
         if (hardwareAvailable) {
             addReading(PROBE, new TemperatureReading(now, mcp9600.getHotJunctionTemperature()));
@@ -180,6 +190,7 @@ public class SmokerHardware {
         }
         blowerForceOn = false;
         blowerDutyPercent = percent;
+        currentBlowerPercent = percent;
         if (!blowerSoftPwmEnabled) {
             blowerCycleStart = System.currentTimeMillis();
             blowerSoftPwmEnabled = true;
@@ -192,6 +203,7 @@ public class SmokerHardware {
     public void disableBlower() {
         blowerSoftPwmEnabled = false;
         blowerForceOn = false;
+        currentBlowerPercent = 0;
         if (hardwareAvailable) fanOutput.off();
     }
 
@@ -360,16 +372,91 @@ public class SmokerHardware {
      * Sets the throttle position as a percentage (0 = closed, 100 = fully open).
      */
     public void setThrottle(int percent) {
-        if (!hardwareAvailable) return;
         if (percent < 0 || percent > 100) {
             throw new IllegalArgumentException("Throttle must be 0-100%, got: " + percent);
         }
+        currentThrottlePercent = percent;
+        if (!hardwareAvailable) return;
         double angle = THROTTLE_MAX_ANGLE - percent / 100.0 * (THROTTLE_MAX_ANGLE - THROTTLE_MIN_ANGLE);
         try {
             servo.setAngle(angle);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Calculate the temperature rate of change for a probe over a given window.
+     *
+     * @param probe        the probe key
+     * @param windowSeconds the time window in seconds (e.g. 30)
+     * @return rate in °C per windowSeconds, or 0 if insufficient data
+     */
+    public double getTemperatureRate(String probe, int windowSeconds) {
+        var readings = getHistory(probe);
+        if (readings.size() < 2) return 0;
+        TemperatureReading latest = readings.getLast();
+        Instant cutoff = latest.timestamp().minusSeconds(windowSeconds);
+        // Find the reading closest to the cutoff time
+        TemperatureReading oldest = null;
+        for (var r : readings) {
+            if (!r.timestamp().isBefore(cutoff)) {
+                oldest = r;
+                break;
+            }
+        }
+        if (oldest == null || oldest == latest) return 0;
+        double elapsed = java.time.Duration.between(oldest.timestamp(), latest.timestamp()).toMillis() / 1000.0;
+        if (elapsed < 1) return 0;
+        // Normalize to windowSeconds
+        return (latest.temperature() - oldest.temperature()) / elapsed * windowSeconds;
+    }
+
+    public int getThrottlePercent() {
+        return currentThrottlePercent;
+    }
+
+    public int getBlowerPercent() {
+        return currentBlowerPercent;
+    }
+
+    public boolean isAutomaticControlActive() {
+        return automaticControlActive;
+    }
+
+    public void setAutomaticControlActive(boolean active) {
+        this.automaticControlActive = active;
+    }
+
+    public boolean isSimulationMode() {
+        return simulationMode;
+    }
+
+    public void setSimulationMode(boolean enabled) {
+        this.simulationMode = enabled;
+    }
+
+    /**
+     * Inject a simulated temperature reading for the given probe.
+     */
+    public void simulateReading(String probe, double temperature) {
+        history.putIfAbsent(probe, new CopyOnWriteArrayList<>());
+        addReading(probe, new TemperatureReading(Instant.now(), temperature));
+    }
+
+    /**
+     * Find the first Meater ambient key that has data, or null.
+     */
+    public String findMeaterAmbientKey() {
+        for (String key : getMeaterKeys()) {
+            if (key.contains("(ambient)")) {
+                var list = history.get(key);
+                if (list != null && !list.isEmpty()) {
+                    return key;
+                }
+            }
+        }
+        return null;
     }
 
     public String boardName() {
