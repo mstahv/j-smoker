@@ -88,6 +88,9 @@ public class SmokerHardware {
         history.put(IBBQ_2, new CopyOnWriteArrayList<>());
         history.put(IBBQ_3, new CopyOnWriteArrayList<>());
 
+        // Meater Cloud works without local hardware — always start it
+        Thread.ofVirtual().name("meater-connect").start(this::connectMeater);
+
         if (!new java.io.File("/dev/i2c-1").exists()) {
             LOG.info("Hardware not detected, running in UI-only mode with fake data");
             devMode = true;
@@ -111,7 +114,6 @@ public class SmokerHardware {
         }
 
         Thread.ofVirtual().name("ibbq-connect").start(this::connectIbbq);
-        Thread.ofVirtual().name("meater-connect").start(this::connectMeater);
     }
 
     @Scheduled(every = "5s")
@@ -238,6 +240,9 @@ public class SmokerHardware {
     private void connectMeater() {
         String email = meaterEmail.orElse("");
         String password = meaterPassword.orElse("");
+        LOG.info("Meater Cloud: email=%s, password=%s".formatted(
+                email.isBlank() ? "(not set)" : email,
+                password.isBlank() ? "(not set)" : "***(" + password.length() + " chars)"));
         if (email.isBlank() || password.isBlank()) {
             LOG.info("Meater Cloud credentials not configured (set MEATER_EMAIL and MEATER_PASSWORD)");
             meaterConnectionAttempted = true;
@@ -245,6 +250,7 @@ public class SmokerHardware {
         }
         try {
             meaterClient = new MeaterCloudClient();
+            LOG.info("Meater Cloud: logging in...");
             meaterClient.login(email, password);
             meaterClient.addListener(new MeaterCloudListener() {
                 @Override

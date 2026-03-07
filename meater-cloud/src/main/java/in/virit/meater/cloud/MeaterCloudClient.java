@@ -1,11 +1,11 @@
 package in.virit.meater.cloud;
 
-import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.ClientBuilder;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
+import tools.jackson.databind.ObjectMapper;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -21,7 +21,8 @@ public class MeaterCloudClient implements AutoCloseable {
     private static final Logger LOG = Logger.getLogger(MeaterCloudClient.class.getName());
     private static final String BASE_URL = "https://public-api.cloud.meater.com/v1";
 
-    private final Client client;
+    private final HttpClient httpClient;
+    private final ObjectMapper mapper = new ObjectMapper();
     private final List<MeaterCloudListener> listeners = new CopyOnWriteArrayList<>();
 
     private String token;
@@ -29,23 +30,26 @@ public class MeaterCloudClient implements AutoCloseable {
     private ScheduledFuture<?> pollFuture;
 
     public MeaterCloudClient() {
-        this.client = ClientBuilder.newClient();
+        this.httpClient = HttpClient.newHttpClient();
     }
 
     /**
      * Authenticate with the Meater Cloud API.
-     *
-     * @param email    Meater Cloud account email
-     * @param password Meater Cloud account password
      */
     public void login(String email, String password) throws MeaterCloudException {
-        try (Response response = client.target(BASE_URL).path("login")
-                .request(MediaType.APPLICATION_JSON)
-                .post(Entity.json(new MeaterApiDtos.LoginRequest(email, password)))) {
+        try {
+            String body = mapper.writeValueAsString(new MeaterApiDtos.LoginRequest(email, password));
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/login"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
 
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             checkResponse(response);
-            var body = response.readEntity(MeaterApiDtos.LoginResponse.class);
-            this.token = body.data().token();
+
+            var loginResponse = mapper.readValue(response.body(), MeaterApiDtos.LoginResponse.class);
+            this.token = loginResponse.data().token();
             LOG.info("Authenticated with Meater Cloud");
 
         } catch (MeaterCloudException e) {
@@ -57,18 +61,21 @@ public class MeaterCloudClient implements AutoCloseable {
 
     /**
      * Get all devices currently connected to Meater Cloud.
-     * Devices only appear when a MEATER app or Block has an active connection to the probe.
      */
     public List<MeaterDevice> getDevices() throws MeaterCloudException {
         requireAuth();
-        try (Response response = client.target(BASE_URL).path("devices")
-                .request(MediaType.APPLICATION_JSON)
-                .header("Authorization", "Bearer " + token)
-                .get()) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/devices"))
+                    .header("Authorization", "Bearer " + token)
+                    .GET()
+                    .build();
 
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             checkResponse(response);
-            var body = response.readEntity(MeaterApiDtos.DevicesResponse.class);
-            return body.data().devices().stream()
+
+            var devicesResponse = mapper.readValue(response.body(), MeaterApiDtos.DevicesResponse.class);
+            return devicesResponse.data().devices().stream()
                     .map(MeaterCloudClient::toDevice)
                     .toList();
 
@@ -84,14 +91,18 @@ public class MeaterCloudClient implements AutoCloseable {
      */
     public MeaterDevice getDevice(String id) throws MeaterCloudException {
         requireAuth();
-        try (Response response = client.target(BASE_URL).path("devices").path(id)
-                .request(MediaType.APPLICATION_JSON)
-                .header("Authorization", "Bearer " + token)
-                .get()) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/devices/" + id))
+                    .header("Authorization", "Bearer " + token)
+                    .GET()
+                    .build();
 
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             checkResponse(response);
-            var body = response.readEntity(MeaterApiDtos.DeviceResponse.class);
-            return toDevice(body.data());
+
+            var deviceResponse = mapper.readValue(response.body(), MeaterApiDtos.DeviceResponse.class);
+            return toDevice(deviceResponse.data());
 
         } catch (MeaterCloudException e) {
             throw e;
@@ -103,8 +114,6 @@ public class MeaterCloudClient implements AutoCloseable {
     /**
      * Start polling for device updates.
      * The Meater Cloud API recommends polling no more than once per 30 seconds.
-     *
-     * @param intervalSeconds polling interval (minimum 30 recommended)
      */
     public void startPolling(long intervalSeconds) {
         stopPolling();
@@ -143,7 +152,6 @@ public class MeaterCloudClient implements AutoCloseable {
     public void close() {
         stopPolling();
         token = null;
-        client.close();
     }
 
     private void poll() {
@@ -174,8 +182,8 @@ public class MeaterCloudClient implements AutoCloseable {
         }
     }
 
-    private void checkResponse(Response response) throws MeaterCloudException {
-        int code = response.getStatus();
+    private void checkResponse(HttpResponse<String> response) throws MeaterCloudException {
+        int code = response.statusCode();
         if (code == 401) {
             token = null;
             throw new MeaterCloudException("Authentication failed", 401);
@@ -187,9 +195,8 @@ public class MeaterCloudClient implements AutoCloseable {
             throw new MeaterCloudException("Rate limited — slow down polling", 429);
         }
         if (code >= 400) {
-            String body = response.readEntity(String.class);
             throw new MeaterCloudException(
-                    "API error %d: %s".formatted(code, body), code);
+                    "API error %d: %s".formatted(code, response.body()), code);
         }
     }
 
