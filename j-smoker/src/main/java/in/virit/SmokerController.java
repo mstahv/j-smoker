@@ -39,17 +39,41 @@ public class SmokerController {
     }
 
     private void logTick(double chamberTemp, double fireTemp, double fireRate, double chamberRate) {
+        // Read food sensor values
+        String foodValues = readFoodSensorValues();
+
         // Verbose to standard log
-        LOG.info(("[SMOKER] state=%s chamber=%.1f fire=%.1f sp=%.1f err=%+.1f" +
-                " out=%.0f T=%d%% B=%d%% fRate=%+.1f cRate=%+.1f")
+        LOG.info(("[SMOKER] state=%s chamber=%.1f(%s) fire=%.1f sp=%.1f err=%+.1f" +
+                " out=%.0f T=%d%% B=%d%% fRate=%+.1f cRate=%+.1f%s")
+                .formatted(state, chamberTemp, activeChamberSourceKey, fireTemp, setpoint, setpoint - chamberTemp,
+                        lastPidOutput, lastThrottlePercent, lastBlowerPercent,
+                        fireRate, chamberRate, foodValues));
+        // Compact to file
+        fileLog(("%s %.0f %.0f %.0f %+.0f %.0f %d %d %.1f %.1f %.1f %+.1f %+.1f%s")
                 .formatted(state, chamberTemp, fireTemp, setpoint, setpoint - chamberTemp,
                         lastPidOutput, lastThrottlePercent, lastBlowerPercent,
-                        fireRate, chamberRate));
-        // Compact to file: time state chamber fire setpoint error output throttle blower P I D fireRate chamberRate
-        fileLog(("%s %.0f %.0f %.0f %+.0f %.0f %d %d %.1f %.1f %.1f %+.1f %+.1f")
-                .formatted(state, chamberTemp, fireTemp, setpoint, setpoint - chamberTemp,
-                        lastPidOutput, lastThrottlePercent, lastBlowerPercent,
-                        lastPTerm, lastITerm, lastDTerm, fireRate, chamberRate));
+                        lastPTerm, lastITerm, lastDTerm, fireRate, chamberRate, foodValues));
+    }
+
+    private String readFoodSensorValues() {
+        var sb = new StringBuilder();
+        // iBBQ food probes
+        for (String key : new String[]{SmokerHardware.IBBQ_2, SmokerHardware.IBBQ_3}) {
+            var reading = hardware.getLatestReading(key);
+            if (reading != null) {
+                sb.append(" %s=%.1f".formatted(key.contains("2") ? "food1" : "food2", reading.temperature()));
+            }
+        }
+        // Meater tip probes
+        for (String key : hardware.getMeaterKeys()) {
+            if (key.contains("(tip)")) {
+                var reading = hardware.getLatestReading(key);
+                if (reading != null) {
+                    sb.append(" %s=%.1f".formatted(key.replace("Meater ", "m").replace(" (tip)", ""), reading.temperature()));
+                }
+            }
+        }
+        return sb.toString();
     }
 
     public enum State {
@@ -106,10 +130,25 @@ public class SmokerController {
     private volatile double lastFireRate;
     private volatile double lastChamberRate;
 
+    // Chamber source selection
+    public enum ChamberSource {
+        AUTO, IBBQ, MEATER;
+        @Override
+        public String toString() {
+            return switch (this) {
+                case AUTO -> "Auto (iBBQ → Meater)";
+                case IBBQ -> "iBBQ 1";
+                case MEATER -> "Meater ambient";
+            };
+        }
+    }
+
+    private volatile ChamberSource preferredChamberSource = ChamberSource.AUTO;
+
     // Alerts for UI consumption
     private final CopyOnWriteArrayList<String> pendingAlerts = new CopyOnWriteArrayList<>();
     private volatile boolean woodAdditionDetected;
-    private volatile String chamberSource = SmokerHardware.IBBQ_1;
+    private volatile String activeChamberSourceKey = SmokerHardware.IBBQ_1;
 
     public void start(double setpointTemp) {
         this.setpoint = setpointTemp;
@@ -125,7 +164,7 @@ public class SmokerController {
         // Immediately open throttle fully for heating
         hardware.setThrottle(100);
         fileLog("---");
-        fileLog("time     state        chamb fire  sp   err   out  T%%  B%%   P     I     D     fRate  cRate");
+        fileLog("time     state        chamb fire  sp   err   out  T%%  B%%   P     I     D     fRate  cRate  [food sensors]");
         log("[SMOKER] STARTED: setpoint=%.1f°C, Kp=%.2f Ki=%.4f Kd=%.2f"
                 .formatted(setpoint, pid.getKp(), pid.getKi(), pid.getKd()));
     }
@@ -192,20 +231,38 @@ public class SmokerController {
         }
         lastTickTime = now;
 
-        // Read sensors — iBBQ 1 primary, Meater ambient as fallback
-        var chamberReading = hardware.getLatestReading(SmokerHardware.IBBQ_1);
-        String activeChamberKey = SmokerHardware.IBBQ_1;
-        if (chamberReading == null) {
-            String meaterKey = hardware.findMeaterAmbientKey();
-            if (meaterKey != null) {
-                chamberReading = hardware.getLatestReading(meaterKey);
-                activeChamberKey = meaterKey;
+        // Read chamber sensor based on preferred source
+        SmokerHardware.TemperatureReading chamberReading = null;
+        String activeKey = null;
+
+        switch (preferredChamberSource) {
+            case IBBQ -> {
+                chamberReading = hardware.getLatestReading(SmokerHardware.IBBQ_1);
+                activeKey = SmokerHardware.IBBQ_1;
+            }
+            case MEATER -> {
+                String meaterKey = hardware.findMeaterAmbientKey();
+                if (meaterKey != null) {
+                    chamberReading = hardware.getLatestReading(meaterKey);
+                    activeKey = meaterKey;
+                }
+            }
+            case AUTO -> {
+                chamberReading = hardware.getLatestReading(SmokerHardware.IBBQ_1);
+                activeKey = SmokerHardware.IBBQ_1;
+                if (chamberReading == null) {
+                    String meaterKey = hardware.findMeaterAmbientKey();
+                    if (meaterKey != null) {
+                        chamberReading = hardware.getLatestReading(meaterKey);
+                        activeKey = meaterKey;
+                    }
+                }
             }
         }
         var fireReading = hardware.getLatestReading(SmokerHardware.PROBE);
 
         if (chamberReading == null) return; // No chamber data, can't control
-        chamberSource = activeChamberKey;
+        activeChamberSourceKey = activeKey;
 
         double chamberTemp = chamberReading.temperature();
         double fireTemp = fireReading != null ? fireReading.temperature() : Double.NaN;
@@ -213,7 +270,7 @@ public class SmokerController {
         lastFireTemp = fireTemp;
 
         double fireRate = hardware.getTemperatureRate(SmokerHardware.PROBE, RATE_WINDOW_SECONDS);
-        double chamberRate = hardware.getTemperatureRate(activeChamberKey, RATE_WINDOW_SECONDS);
+        double chamberRate = hardware.getTemperatureRate(activeKey, RATE_WINDOW_SECONDS);
         lastFireRate = fireRate;
         lastChamberRate = chamberRate;
 
@@ -494,8 +551,16 @@ public class SmokerController {
         this.lowFuelOutputThreshold = threshold;
     }
 
-    public String getChamberSource() {
-        return chamberSource;
+    public String getActiveChamberSourceKey() {
+        return activeChamberSourceKey;
+    }
+
+    public ChamberSource getPreferredChamberSource() {
+        return preferredChamberSource;
+    }
+
+    public void setPreferredChamberSource(ChamberSource source) {
+        this.preferredChamberSource = source;
     }
 
     /**

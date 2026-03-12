@@ -34,7 +34,7 @@ import java.util.logging.Logger;
 public class SmokerHardware {
 
     private static final Logger LOG = Logger.getLogger(SmokerHardware.class.getName());
-    private static final int MAX_HISTORY = 120; // 10 minutes at 5s interval
+    private static final int MAX_HISTORY = 720; // 1 hour at 5s interval
 
     public static final String PROBE = "Probe";
     public static final String CHIP = "Chip";
@@ -295,38 +295,82 @@ public class SmokerHardware {
         }
     }
 
+    private static final int IBBQ_SCAN_SECONDS = 10;
+    private static final int IBBQ_RETRY_INTERVAL_SECONDS = 60;
+
     private void connectIbbq() {
-        try {
-            ibbqThermometer = IBBQThermometer.scan(10);
-            ibbqThermometer.addListener(new IBBQListener() {
-                @Override
-                public void onTemperatureUpdate(TemperatureUpdate update) {
-                    for (var probe : update.probes()) {
-                        if (probe.channel() < IBBQ_KEYS.length && probe.isConnected()) {
-                            addReading(IBBQ_KEYS[probe.channel()],
-                                    new TemperatureReading(update.timestamp(), probe.temperatureCelsius()));
-                        }
+        for (int attempt = 1; ; attempt++) {
+            LOG.info("iBBQ scan attempt %d...".formatted(attempt));
+            try {
+                connectIbbqOnce();
+                LOG.info("iBBQ thermometer connected on attempt %d".formatted(attempt));
+                return;
+            } catch (Exception e) {
+                LOG.log(Level.WARNING, "iBBQ scan attempt %d failed: %s".formatted(attempt, e.getMessage()));
+            } finally {
+                ibbqConnectionAttempted = true;
+            }
+            try {
+                Thread.sleep(Duration.ofSeconds(IBBQ_RETRY_INTERVAL_SECONDS));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    private void connectIbbqOnce() throws Exception {
+        ibbqThermometer = IBBQThermometer.scan(IBBQ_SCAN_SECONDS);
+        ibbqThermometer.addListener(new IBBQListener() {
+            @Override
+            public void onTemperatureUpdate(TemperatureUpdate update) {
+                for (var probe : update.probes()) {
+                    if (probe.channel() < IBBQ_KEYS.length && probe.isConnected()) {
+                        addReading(IBBQ_KEYS[probe.channel()],
+                                new TemperatureReading(update.timestamp(), probe.temperatureCelsius()));
                     }
                 }
-            });
-            ibbqAvailable = true;
-            LOG.info("iBBQ thermometer connected");
-        } catch (Exception e) {
-            LOG.log(Level.WARNING, "iBBQ thermometer not found", e);
-        } finally {
-            ibbqConnectionAttempted = true;
-        }
+            }
+        });
+        ibbqAvailable = true;
+    }
+
+    /**
+     * Manually trigger an iBBQ reconnect attempt in the background.
+     * No-op if already connected.
+     */
+    public void reconnectIbbq() {
+        if (ibbqAvailable) return;
+        ibbqConnectionAttempted = false;
+        Thread.ofVirtual().name("ibbq-reconnect").start(() -> {
+            LOG.info("Manual iBBQ reconnect requested");
+            try {
+                connectIbbqOnce();
+                LOG.info("iBBQ thermometer connected (manual reconnect)");
+            } catch (Exception e) {
+                LOG.log(Level.WARNING, "Manual iBBQ reconnect failed: " + e.getMessage());
+            } finally {
+                ibbqConnectionAttempted = true;
+            }
+        });
     }
 
     private void prefillDummyHistory() {
         Instant now = Instant.now();
+        String meaterTip = MEATER_PREFIX + "1 (tip)";
+        String meaterAmbient = MEATER_PREFIX + "1 (ambient)";
+        history.putIfAbsent(meaterTip, new CopyOnWriteArrayList<>());
+        history.putIfAbsent(meaterAmbient, new CopyOnWriteArrayList<>());
         for (int i = MAX_HISTORY; i > 0; i--) {
             Instant ts = now.minusSeconds(i * 5L);
+            double progress = (MAX_HISTORY - i) / (double) MAX_HISTORY;
             addReading(PROBE, new TemperatureReading(ts, 220.0 + Math.random() * 15 - 7.5));
             addReading(CHIP, new TemperatureReading(ts, 40.0 + Math.random() * 5 - 2.5));
             addReading(IBBQ_1, new TemperatureReading(ts, 175.0 + Math.random() * 15 - 7.5));
-            addReading(IBBQ_2, new TemperatureReading(ts, 70.0 + Math.random() * 8 - 4));
-            addReading(IBBQ_3, new TemperatureReading(ts, 65.0 + Math.random() * 8 - 4));
+            addReading(IBBQ_2, new TemperatureReading(ts, 40.0 + progress * 32 + Math.random() * 4 - 2));
+            addReading(IBBQ_3, new TemperatureReading(ts, 35.0 + progress * 33 + Math.random() * 4 - 2));
+            addReading(meaterTip, new TemperatureReading(ts, 38.0 + progress * 36 + Math.random() * 4 - 2));
+            addReading(meaterAmbient, new TemperatureReading(ts, 190.0 + Math.random() * 10 - 5));
         }
     }
 

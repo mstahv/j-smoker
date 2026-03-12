@@ -28,6 +28,7 @@ public class AutomaticView extends VVerticalLayout {
     private final NumberField setpointField = new NumberField("Target temperature (°C)");
     private final Button startStopButton = new Button();
     private final Select<SmokerController.State> stateSelect = new Select<>();
+    private final Select<SmokerController.ChamberSource> chamberSourceSelect = new Select<>();
     private final StateIndicator stateIndicator = new StateIndicator();
     private final ActuatorStatus actuatorStatus = new ActuatorStatus();
     private final PidDiagnostics pidDiagnostics = new PidDiagnostics();
@@ -69,7 +70,16 @@ public class AutomaticView extends VVerticalLayout {
             }
         });
 
-        var controls = new HorizontalLayout(setpointField, startStopButton, stateSelect) {{
+        chamberSourceSelect.setLabel("Chamber source");
+        chamberSourceSelect.setItems(SmokerController.ChamberSource.values());
+        chamberSourceSelect.setValue(controller.getPreferredChamberSource());
+        chamberSourceSelect.addValueChangeListener(e -> {
+            if (e.isFromClient() && e.getValue() != null) {
+                controller.setPreferredChamberSource(e.getValue());
+            }
+        });
+
+        var controls = new HorizontalLayout(setpointField, startStopButton, stateSelect, chamberSourceSelect) {{
             setAlignItems(Alignment.BASELINE);
             getStyle().set("flex-wrap", "wrap");
         }};
@@ -102,7 +112,8 @@ public class AutomaticView extends VVerticalLayout {
                 controller.getLastThrottlePercent(),
                 controller.getLastBlowerPercent(),
                 controller.getLastChamberTemp(),
-                controller.getLastFireTemp()
+                controller.getLastFireTemp(),
+                controller.getActiveChamberSourceKey()
         );
 
         pidDiagnostics.update(
@@ -182,18 +193,19 @@ public class AutomaticView extends VVerticalLayout {
         private final Span blowerLabel = new Span();
         private final Span chamberLabel = new Span();
         private final Span fireLabel = new Span();
+        private final Span sourceLabel = new Span();
 
         ActuatorStatus() {
             add(new H4("Actuators & temperatures"));
 
-            var grid = new Div(throttleLabel, blowerLabel, chamberLabel, fireLabel);
+            var grid = new Div(throttleLabel, blowerLabel, chamberLabel, fireLabel, sourceLabel);
             grid.getStyle()
                     .setDisplay(com.vaadin.flow.dom.Style.Display.GRID)
                     .set("grid-template-columns", "1fr 1fr")
                     .set("gap", LumoProps.SPACE_S.var());
             add(grid);
 
-            for (var label : new Span[]{throttleLabel, blowerLabel, chamberLabel, fireLabel}) {
+            for (var label : new Span[]{throttleLabel, blowerLabel, chamberLabel, fireLabel, sourceLabel}) {
                 label.getStyle()
                         .setPadding(LumoProps.SPACE_XS.var() + " " + LumoProps.SPACE_S.var())
                         .setBackground(LumoProps.CONTRAST_5PCT.var())
@@ -201,13 +213,14 @@ public class AutomaticView extends VVerticalLayout {
             }
         }
 
-        void update(int throttle, int blower, double chamberTemp, double fireTemp) {
+        void update(int throttle, int blower, double chamberTemp, double fireTemp, String chamberSource) {
             throttleLabel.setText("Throttle: %d%%".formatted(throttle));
             blowerLabel.setText("Blower: %d%%".formatted(blower));
             chamberLabel.setText("Chamber: %s".formatted(
                     Double.isNaN(chamberTemp) ? "–" : "%.1f°C".formatted(chamberTemp)));
             fireLabel.setText("Fire box: %s".formatted(
                     Double.isNaN(fireTemp) ? "–" : "%.1f°C".formatted(fireTemp)));
+            sourceLabel.setText("Source: %s".formatted(chamberSource));
         }
     }
 

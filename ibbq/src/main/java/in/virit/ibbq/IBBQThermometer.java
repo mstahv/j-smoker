@@ -67,14 +67,20 @@ public class IBBQThermometer implements AutoCloseable {
      */
     public static IBBQThermometer scan(int scanTimeoutSeconds) throws IBBQException {
         try {
-            DeviceManager dm = DeviceManager.createInstance(false);
+            DeviceManager dm = getOrCreateDeviceManager();
             dm.setScanFilter(Map.of(
                     DiscoveryFilter.Transport, DiscoveryTransport.LE
             ));
 
             dm.scanForBluetoothDevices(scanTimeoutSeconds * 1000);
 
+            // Stop discovery before connecting — BlueZ can't scan and connect simultaneously
             BluetoothAdapter adapter = dm.getAdapter();
+            if (adapter != null && Boolean.TRUE.equals(adapter.isDiscovering())) {
+                adapter.stopDiscovery();
+            }
+            Thread.sleep(500); // let adapter settle
+
             List<BluetoothDevice> devices = dm.getDevices();
             for (BluetoothDevice dev : devices) {
                 String name = dev.getName();
@@ -85,12 +91,20 @@ public class IBBQThermometer implements AutoCloseable {
                     return thermo;
                 }
             }
-            dm.closeConnection();
             throw new IBBQException("No iBBQ device found during scan");
         } catch (IBBQException e) {
             throw e;
         } catch (Exception e) {
             throw new IBBQException("Scan failed", e);
+        }
+    }
+
+    private static DeviceManager getOrCreateDeviceManager() throws Exception {
+        try {
+            return DeviceManager.getInstance();
+        } catch (IllegalStateException e) {
+            // Not yet created
+            return DeviceManager.createInstance(false);
         }
     }
 
@@ -103,7 +117,7 @@ public class IBBQThermometer implements AutoCloseable {
      */
     public static IBBQThermometer connect(String address) throws IBBQException {
         try {
-            DeviceManager dm = DeviceManager.createInstance(false);
+            DeviceManager dm = getOrCreateDeviceManager();
             dm.setScanFilter(Map.of(
                     DiscoveryFilter.Transport, DiscoveryTransport.LE
             ));
@@ -119,7 +133,6 @@ public class IBBQThermometer implements AutoCloseable {
                     return thermo;
                 }
             }
-            dm.closeConnection();
             throw new IBBQException("Device not found at address: " + address);
         } catch (IBBQException e) {
             throw e;
@@ -132,13 +145,14 @@ public class IBBQThermometer implements AutoCloseable {
      * Performs the full iBBQ handshake: connect, discover services, authenticate,
      * set Celsius units, subscribe to notifications, and enable realtime data.
      */
+    private static final int CONNECT_RETRIES = 5;
+    private static final long CONNECT_RETRY_DELAY_MS = 2000;
+
     public void connectAndAuthenticate() throws IBBQException {
         try {
             setState(ConnectionState.CONNECTING);
 
-            if (!device.connect()) {
-                throw new IBBQException("Failed to connect to device");
-            }
+            connectWithRetry();
 
             // Wait for services to be resolved
             waitForServicesResolved();
@@ -172,11 +186,14 @@ public class IBBQThermometer implements AutoCloseable {
             setState(ConnectionState.READY);
 
         } catch (IBBQException e) {
+            disconnectQuietly();
             setState(ConnectionState.DISCONNECTED);
             throw e;
         } catch (Exception e) {
+            disconnectQuietly();
             setState(ConnectionState.DISCONNECTED);
-            throw new IBBQException("Authentication failed", e);
+            LOG.log(Level.WARNING, "connectAndAuthenticate failed at " + state + " stage", e);
+            throw new IBBQException("Authentication failed at " + state + " stage: " + e.getMessage(), e);
         }
     }
 
@@ -242,8 +259,36 @@ public class IBBQThermometer implements AutoCloseable {
         }
     }
 
+    private void connectWithRetry() throws IBBQException, InterruptedException {
+        for (int attempt = 1; attempt <= CONNECT_RETRIES; attempt++) {
+            try {
+                disconnectQuietly();
+                Thread.sleep(attempt == 1 ? 500 : CONNECT_RETRY_DELAY_MS);
+                if (device.connect()) {
+                    LOG.info("BLE connect succeeded on attempt " + attempt);
+                    return;
+                }
+            } catch (Exception e) {
+                LOG.info("BLE connect attempt %d/%d failed: %s".formatted(
+                        attempt, CONNECT_RETRIES, e.getMessage()));
+                if (attempt == CONNECT_RETRIES) {
+                    throw new IBBQException("Failed to connect after " + CONNECT_RETRIES + " attempts: " + e.getMessage(), e);
+                }
+            }
+        }
+        throw new IBBQException("Failed to connect to device (returned false)");
+    }
+
+    private void disconnectQuietly() {
+        try {
+            device.disconnect();
+        } catch (Exception e) {
+            LOG.log(Level.FINE, "Error during cleanup disconnect", e);
+        }
+    }
+
     private void waitForServicesResolved() throws IBBQException, InterruptedException {
-        for (int i = 0; i < 50; i++) {
+        for (int i = 0; i < 100; i++) {
             if (Boolean.TRUE.equals(device.isServicesResolved())) {
                 return;
             }

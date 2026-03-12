@@ -2,10 +2,13 @@ package in.virit;
 
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.DetachEvent;
+import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.Route;
 import in.virit.SmokerHardware.TemperatureReading;
@@ -32,6 +35,7 @@ public class ThermometersView extends VVerticalLayout {
     private final ProbeDisplay ibbq2Display;
     private final ProbeDisplay ibbq3Display;
     private final WarningMessage ibbqWarning = new WarningMessage("");
+    private final Button ibbqReconnectButton = new Button("Reconnect iBBQ", VaadinIcon.REFRESH.create());
     private final WarningMessage meaterWarning = new WarningMessage("");
     private final FormLayout displays = new FormLayout();
     private final Map<String, ProbeDisplay> meaterDisplays = new LinkedHashMap<>();
@@ -46,7 +50,17 @@ public class ThermometersView extends VVerticalLayout {
         ibbq2Display = new ProbeDisplay("iBBQ 2 (food 1)", 0, 120);
         ibbq3Display = new ProbeDisplay("iBBQ 3 (food 2)", 0, 120);
 
-        add(ibbqWarning, meaterWarning);
+        ibbqReconnectButton.addThemeVariants(ButtonVariant.LUMO_SMALL);
+        ibbqReconnectButton.addClickListener(e -> {
+            smokerHardware.reconnectIbbq();
+            ibbqReconnectButton.setEnabled(false);
+            ibbqReconnectButton.setText("Scanning...");
+        });
+
+        var ibbqBar = new HorizontalLayout(ibbqWarning, ibbqReconnectButton) {{
+            setAlignItems(Alignment.CENTER);
+        }};
+        add(ibbqBar, meaterWarning);
         displays.add(ibbq1Display, ibbq2Display, ibbq3Display, probeDisplay, chipDisplay);
         add(displays);
 
@@ -89,12 +103,17 @@ public class ThermometersView extends VVerticalLayout {
     private void updateIbbqWarning() {
         if (smokerHardware.isDevMode() || smokerHardware.isIbbqAvailable()) {
             ibbqWarning.setVisible(false);
+            ibbqReconnectButton.setVisible(false);
         } else if (!smokerHardware.isIbbqConnectionAttempted()) {
-            ibbqWarning.setText("iBBQ thermometer connecting...");
+            ibbqWarning.setText("iBBQ thermometer scanning...");
             ibbqWarning.setVisible(true);
+            ibbqReconnectButton.setVisible(false);
         } else {
             ibbqWarning.setText("iBBQ thermometer not connected — BLE device not found");
             ibbqWarning.setVisible(true);
+            ibbqReconnectButton.setVisible(true);
+            ibbqReconnectButton.setEnabled(true);
+            ibbqReconnectButton.setText("Reconnect iBBQ");
         }
     }
 

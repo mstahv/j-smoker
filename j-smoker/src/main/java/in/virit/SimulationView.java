@@ -38,6 +38,7 @@ public class SimulationView extends VVerticalLayout {
     private final NumberField setpointField = new NumberField("Target temperature (°C)");
     private final Button startStopButton = new Button();
     private final Select<SmokerController.State> stateSelect = new Select<>();
+    private final Select<SmokerController.ChamberSource> chamberSourceSelect = new Select<>();
 
     // Status display
     private final Span stateLabel = new Span();
@@ -124,6 +125,15 @@ public class SimulationView extends VVerticalLayout {
             }
         });
 
+        chamberSourceSelect.setLabel("Chamber source");
+        chamberSourceSelect.setItems(SmokerController.ChamberSource.values());
+        chamberSourceSelect.setValue(controller.getPreferredChamberSource());
+        chamberSourceSelect.addValueChangeListener(e -> {
+            if (e.isFromClient() && e.getValue() != null) {
+                controller.setPreferredChamberSource(e.getValue());
+            }
+        });
+
         // Scenario buttons
         var flameButton = new Button("Simulate flame", e -> simulateFlame());
         flameButton.getStyle().setBackground("#ffcdd2");
@@ -177,7 +187,7 @@ public class SimulationView extends VVerticalLayout {
                 }},
                 new Hr(),
                 new H4("Automatic control"),
-                new Div(setpointField, startStopButton, stateSelect) {{
+                new Div(setpointField, startStopButton, stateSelect, chamberSourceSelect) {{
                     getStyle()
                             .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
                             .set("gap", LumoProps.SPACE_M.var())
@@ -276,7 +286,7 @@ public class SimulationView extends VVerticalLayout {
         stateLabel.setText("State: %s".formatted(AutomaticView.stateLabel(state)));
         stateLabel.getStyle().setColor(stateColor).setFontWeight("bold");
 
-        chamberSourceLabel.setText("Chamber source: %s".formatted(controller.getChamberSource()));
+        chamberSourceLabel.setText("Active source: %s".formatted(controller.getActiveChamberSourceKey()));
         throttleLabel.setText("Throttle: %d%%".formatted(controller.getLastThrottlePercent()));
         blowerLabel.setText("Blower: %d%%".formatted(controller.getLastBlowerPercent()));
         pidOutputLabel.setText("PID output: %.1f / 200".formatted(controller.getLastPidOutput()));
