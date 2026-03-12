@@ -19,6 +19,10 @@ import org.vaadin.firitin.util.style.LumoProps;
 import org.vaadin.svgvis.SvgSparkLine;
 import org.vaadin.svgvis.SvgSparkLine.DataPoint;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -131,6 +135,8 @@ public class ThermometersView extends VVerticalLayout {
     }
 
     static class ProbeDisplay extends VerticalLayout {
+        private static final long STALE_THRESHOLD_SECONDS = 180;
+
         private final Gauge gauge;
         private final RelativeTime timeLabel = new RelativeTime();
         private final SvgSparkLine sparkLine = new SvgSparkLine(300, 80);
@@ -159,12 +165,19 @@ public class ThermometersView extends VVerticalLayout {
             gauge.setVisible(hasData);
             sparkLine.setVisible(hasData);
             if (!hasData) return;
+
             TemperatureReading latest = history.getLast();
             gauge.setValue(latest.temperature());
             timeLabel.setDatetime(latest.timestamp());
+
+            boolean stale = Duration.between(latest.timestamp(), Instant.now()).toSeconds() > STALE_THRESHOLD_SECONDS;
+            timeLabel.getElement().getStyle().setColor(stale ? "orange" : LumoProps.SECONDARY_TEXT_COLOR.var());
+
             sparkLine.setData(history.stream()
                     .map(r -> DataPoint.of(r.timestamp(), r.temperature()))
                     .toList());
+            DateTimeFormatter tf = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault());
+            sparkLine.setTimeScale(tf.format(history.getFirst().timestamp()), tf.format(latest.timestamp()));
             sparkLine.draw();
         }
     }

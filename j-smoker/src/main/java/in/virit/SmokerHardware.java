@@ -20,8 +20,14 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,6 +41,10 @@ public class SmokerHardware {
 
     private static final Logger LOG = Logger.getLogger(SmokerHardware.class.getName());
     private static final int MAX_HISTORY = 720; // 1 hour at 5s interval
+
+    static final Path LOG_DIR = Path.of(System.getProperty("user.home"), ".j-smoker");
+    static final Path LOG_FILE = LOG_DIR.resolve("smoker.log");
+    static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     public static final String PROBE = "Probe";
     public static final String CHIP = "Chip";
@@ -97,8 +107,9 @@ public class SmokerHardware {
         history.put(IBBQ_2, new CopyOnWriteArrayList<>());
         history.put(IBBQ_3, new CopyOnWriteArrayList<>());
 
-        // Meater Cloud works without local hardware — always start it
-        Thread.ofVirtual().name("meater-connect").start(this::connectMeater);
+        // Restore persisted history and prune old entries
+        restoreFromLog();
+        pruneLog();
 
         if (!new java.io.File("/dev/i2c-1").exists()) {
             LOG.info("Hardware not detected, running in UI-only mode with fake data");
@@ -106,6 +117,9 @@ public class SmokerHardware {
             prefillDummyHistory();
             return;
         }
+
+        // Meater Cloud works without local hardware but is pointless in dev mode
+        Thread.ofVirtual().name("meater-connect").start(this::connectMeater);
 
         try {
             pi4j = Pi4J.newAutoContext();
@@ -129,18 +143,53 @@ public class SmokerHardware {
     void readTemperatures() {
         if (simulationMode) return; // Simulation injects readings directly
         Instant now = Instant.now();
+        var temps = new java.util.LinkedHashMap<String, Double>();
         if (hardwareAvailable) {
-            addReading(PROBE, new TemperatureReading(now, mcp9600.getHotJunctionTemperature()));
-            addReading(CHIP, new TemperatureReading(now, mcp9600.getColdJunctionTemperature()));
+            double probeTemp = mcp9600.getHotJunctionTemperature();
+            double chipTemp = mcp9600.getColdJunctionTemperature();
+            addReading(PROBE, new TemperatureReading(now, probeTemp));
+            addReading(CHIP, new TemperatureReading(now, chipTemp));
+            temps.put(PROBE, probeTemp);
+            temps.put(CHIP, chipTemp);
         } else if (devMode) {
-            addReading(PROBE, new TemperatureReading(now, 225.0 + Math.random() * 10 - 5));
-            addReading(CHIP, new TemperatureReading(now, 42.0 + Math.random() * 2 - 1));
-            addReading(IBBQ_1, new TemperatureReading(now, 180.0 + Math.random() * 10 - 5));
-            addReading(IBBQ_2, new TemperatureReading(now, 72.0 + Math.random() * 4 - 2));
-            addReading(IBBQ_3, new TemperatureReading(now, 68.0 + Math.random() * 4 - 2));
-            addReading(MEATER_PREFIX + "1 (tip)", new TemperatureReading(now, 74.0 + Math.random() * 4 - 2));
-            addReading(MEATER_PREFIX + "1 (ambient)", new TemperatureReading(now, 195.0 + Math.random() * 10 - 5));
+            double probeTemp = 225.0 + Math.random() * 10 - 5;
+            double chipTemp = 42.0 + Math.random() * 2 - 1;
+            double ibbq1 = 180.0 + Math.random() * 10 - 5;
+            double ibbq2 = 72.0 + Math.random() * 4 - 2;
+            double ibbq3 = 68.0 + Math.random() * 4 - 2;
+            double meaterTip = 74.0 + Math.random() * 4 - 2;
+            double meaterAmbient = 195.0 + Math.random() * 10 - 5;
+            addReading(PROBE, new TemperatureReading(now, probeTemp));
+            addReading(CHIP, new TemperatureReading(now, chipTemp));
+            addReading(IBBQ_1, new TemperatureReading(now, ibbq1));
+            addReading(IBBQ_2, new TemperatureReading(now, ibbq2));
+            addReading(IBBQ_3, new TemperatureReading(now, ibbq3));
+            addReading(MEATER_PREFIX + "1 (tip)", new TemperatureReading(now, meaterTip));
+            addReading(MEATER_PREFIX + "1 (ambient)", new TemperatureReading(now, meaterAmbient));
+            temps.put(PROBE, probeTemp);
+            temps.put(CHIP, chipTemp);
+            temps.put(IBBQ_1, ibbq1);
+            temps.put(IBBQ_2, ibbq2);
+            temps.put(IBBQ_3, ibbq3);
+            temps.put(MEATER_PREFIX + "1 (tip)", meaterTip);
+            temps.put(MEATER_PREFIX + "1 (ambient)", meaterAmbient);
         }
+        // Also include latest iBBQ and Meater readings from external callbacks
+        if (hardwareAvailable) {
+            for (String key : IBBQ_KEYS) {
+                var reading = getLatestReading(key);
+                if (reading != null && Duration.between(reading.timestamp(), now).toSeconds() < 10) {
+                    temps.put(key, reading.temperature());
+                }
+            }
+            for (String key : getMeaterKeys()) {
+                var reading = getLatestReading(key);
+                if (reading != null && Duration.between(reading.timestamp(), now).toSeconds() < 60) {
+                    temps.put(key, reading.temperature());
+                }
+            }
+        }
+        logTemps(temps);
     }
 
     @Scheduled(every = "0.1s")
@@ -288,7 +337,7 @@ public class SmokerHardware {
             meaterClient.startPolling(30);
             meaterAvailable = true;
             LOG.info("Meater Cloud connected, polling every 30s");
-        } catch (Exception e) {
+        } catch (Throwable e) {
             LOG.log(Level.WARNING, "Meater Cloud connection failed", e);
         } finally {
             meaterConnectionAttempted = true;
@@ -297,25 +346,53 @@ public class SmokerHardware {
 
     private static final int IBBQ_SCAN_SECONDS = 10;
     private static final int IBBQ_RETRY_INTERVAL_SECONDS = 60;
+    private static final int IBBQ_STALE_THRESHOLD_SECONDS = 30;
 
     private void connectIbbq() {
-        for (int attempt = 1; ; attempt++) {
-            LOG.info("iBBQ scan attempt %d...".formatted(attempt));
-            try {
-                connectIbbqOnce();
-                LOG.info("iBBQ thermometer connected on attempt %d".formatted(attempt));
-                return;
-            } catch (Exception e) {
-                LOG.log(Level.WARNING, "iBBQ scan attempt %d failed: %s".formatted(attempt, e.getMessage()));
-            } finally {
-                ibbqConnectionAttempted = true;
+        while (true) {
+            // Phase 1: connect with retries
+            for (int attempt = 1; !ibbqAvailable; attempt++) {
+                LOG.info("iBBQ scan attempt %d...".formatted(attempt));
+                try {
+                    connectIbbqOnce();
+                    LOG.info("iBBQ thermometer connected on attempt %d".formatted(attempt));
+                } catch (Exception e) {
+                    LOG.log(Level.WARNING, "iBBQ scan attempt %d failed: %s".formatted(attempt, e.getMessage()));
+                } finally {
+                    ibbqConnectionAttempted = true;
+                }
+                if (!ibbqAvailable) {
+                    try {
+                        Thread.sleep(Duration.ofSeconds(IBBQ_RETRY_INTERVAL_SECONDS));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
             }
-            try {
-                Thread.sleep(Duration.ofSeconds(IBBQ_RETRY_INTERVAL_SECONDS));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
+
+            // Phase 2: monitor connection, detect data staleness
+            LOG.info("iBBQ monitoring connection...");
+            while (ibbqAvailable) {
+                try {
+                    Thread.sleep(Duration.ofSeconds(IBBQ_STALE_THRESHOLD_SECONDS));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                var latest = getLatestReading(IBBQ_1);
+                if (latest == null) continue;
+                long ageSec = Duration.between(latest.timestamp(), Instant.now()).toSeconds();
+                if (ageSec > IBBQ_STALE_THRESHOLD_SECONDS) {
+                    LOG.warning("iBBQ data stale (%ds old), reconnecting...".formatted(ageSec));
+                    ibbqAvailable = false;
+                    if (ibbqThermometer != null) {
+                        ibbqThermometer.close();
+                        ibbqThermometer = null;
+                    }
+                }
             }
+            // Loop back to phase 1
         }
     }
 
@@ -374,11 +451,128 @@ public class SmokerHardware {
         }
     }
 
+    /**
+     * Restore temperature history from smoker.log on startup.
+     * Reads TEMPS lines, finds the most recent contiguous session (no gap > 1 hour),
+     * and populates the history map.
+     */
+    private void restoreFromLog() {
+        if (!Files.exists(LOG_FILE)) return;
+        try {
+            List<String> lines = Files.readAllLines(LOG_FILE);
+
+            // Parse all TEMPS lines with timestamps
+            record ParsedEntry(LocalDateTime time, String key, double value) {}
+            var entries = new ArrayList<ParsedEntry>();
+            var timestamps = new ArrayList<LocalDateTime>();
+
+            for (String line : lines) {
+                String[] parts = line.split("\t");
+                if (parts.length < 3 || !"TEMPS".equals(parts[1])) continue;
+                LocalDateTime ts;
+                try {
+                    ts = LocalDateTime.parse(parts[0], TIME_FMT);
+                } catch (Exception e) {
+                    continue; // skip unparseable lines
+                }
+                timestamps.add(ts);
+                for (int i = 2; i < parts.length; i++) {
+                    int eq = parts[i].indexOf('=');
+                    if (eq < 0) continue;
+                    String key = parts[i].substring(0, eq);
+                    try {
+                        double value = Double.parseDouble(parts[i].substring(eq + 1));
+                        entries.add(new ParsedEntry(ts, key, value));
+                    } catch (NumberFormatException e) {
+                        // skip
+                    }
+                }
+            }
+
+            if (timestamps.isEmpty()) return;
+
+            // Find cutoff: walk backwards, stop at first gap > 1 hour
+            LocalDateTime sessionStart = timestamps.getLast();
+            for (int i = timestamps.size() - 1; i > 0; i--) {
+                long gapSeconds = java.time.Duration.between(timestamps.get(i - 1), timestamps.get(i)).toSeconds();
+                if (gapSeconds > 3600) {
+                    break;
+                }
+                sessionStart = timestamps.get(i - 1);
+            }
+
+            // Add entries from the session to history
+            final LocalDateTime cutoff = sessionStart;
+            int restored = 0;
+            for (var entry : entries) {
+                if (entry.time.isBefore(cutoff)) continue;
+                Instant instant = entry.time.atZone(java.time.ZoneId.systemDefault()).toInstant();
+                history.putIfAbsent(entry.key, new CopyOnWriteArrayList<>());
+                addReading(entry.key, new TemperatureReading(instant, entry.value));
+                restored++;
+            }
+            LOG.info("Restored %d readings from smoker.log (session start: %s)".formatted(restored, cutoff));
+        } catch (IOException e) {
+            LOG.log(Level.WARNING, "Failed to restore from smoker.log", e);
+        }
+    }
+
+    /**
+     * Prune smoker.log: keep only lines with timestamps within the last month.
+     * Lines without a parseable ISO timestamp are discarded.
+     */
+    private void pruneLog() {
+        if (!Files.exists(LOG_FILE)) return;
+        try {
+            List<String> lines = Files.readAllLines(LOG_FILE);
+            LocalDateTime oneMonthAgo = LocalDateTime.now().minusMonths(1);
+            var kept = new ArrayList<String>();
+            for (String line : lines) {
+                // Try to parse the timestamp at the start of the line
+                try {
+                    String tsStr = line.split("[\t ]", 2)[0];
+                    LocalDateTime ts = LocalDateTime.parse(tsStr, TIME_FMT);
+                    if (!ts.isBefore(oneMonthAgo)) {
+                        kept.add(line);
+                    }
+                } catch (Exception e) {
+                    // Unparseable timestamp — discard (old HH:mm:ss format or corrupt)
+                }
+            }
+            if (kept.size() < lines.size()) {
+                Files.writeString(LOG_FILE, String.join("\n", kept) + (kept.isEmpty() ? "" : "\n"));
+                LOG.info("Pruned smoker.log: %d → %d lines".formatted(lines.size(), kept.size()));
+            }
+        } catch (IOException e) {
+            LOG.log(Level.WARNING, "Failed to prune smoker.log", e);
+        }
+    }
+
     private void addReading(String probe, TemperatureReading reading) {
         var list = history.get(probe);
         list.add(reading);
         while (list.size() > MAX_HISTORY) {
             list.remove(0);
+        }
+    }
+
+    /**
+     * Append a TEMPS line to smoker.log with the given probe readings.
+     */
+    private void logTemps(Map<String, Double> readings) {
+        if (readings.isEmpty()) return;
+        try {
+            Files.createDirectories(LOG_DIR);
+            var sb = new StringBuilder();
+            sb.append(LocalDateTime.now().format(TIME_FMT));
+            sb.append("\tTEMPS");
+            for (var entry : readings.entrySet()) {
+                sb.append('\t').append(entry.getKey()).append('=').append("%.1f".formatted(entry.getValue()));
+            }
+            sb.append('\n');
+            Files.writeString(LOG_FILE, sb.toString(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (IOException e) {
+            // Don't let file logging failures break sensor reads
         }
     }
 
@@ -404,6 +598,7 @@ public class SmokerHardware {
         }
         if (meaterClient != null) meaterClient.close();
         if (ibbqThermometer != null) ibbqThermometer.close();
+        IBBQThermometer.shutdownBle();
         if (fanOutput != null) fanOutput.off();
         if (mcp9600 != null) mcp9600.close();
         if (pi4j != null) pi4j.shutdown();

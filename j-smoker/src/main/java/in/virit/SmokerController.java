@@ -5,13 +5,10 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -21,8 +18,6 @@ import java.util.logging.Logger;
 public class SmokerController {
 
     private static final Logger LOG = Logger.getLogger(SmokerController.class.getName());
-    private static final Path LOG_FILE = Path.of("smoker.log");
-    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private void log(String msg) {
         LOG.info(msg);
@@ -31,8 +26,9 @@ public class SmokerController {
 
     private void fileLog(String msg) {
         try {
-            String line = LocalDateTime.now().format(TIME_FMT) + " " + msg + "\n";
-            Files.writeString(LOG_FILE, line, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            Files.createDirectories(SmokerHardware.LOG_DIR);
+            String line = LocalDateTime.now().format(SmokerHardware.TIME_FMT) + " " + msg + "\n";
+            Files.writeString(SmokerHardware.LOG_FILE, line, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException e) {
             // Don't let file logging failures break the controller
         }

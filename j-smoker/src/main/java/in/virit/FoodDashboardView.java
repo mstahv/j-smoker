@@ -23,8 +23,12 @@ import org.vaadin.firitin.appframework.MenuItem;
 import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
 import org.vaadin.firitin.util.style.LumoProps;
 
+import com.vaadin.flow.component.charts.model.Time;
+
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.TimeZone;
 
 @Route
 @MenuItem(icon = VaadinIcon.CUTLERY)
@@ -85,6 +89,9 @@ public class FoodDashboardView extends VVerticalLayout {
     private void updateChart() {
         Configuration conf = chart.getConfiguration();
         conf.setTitle("Food Temperature History");
+        Time time = new Time();
+        time.setTimezoneOffset(-TimeZone.getTimeZone(ZoneId.systemDefault()).getRawOffset() / 60000);
+        conf.setTime(time);
         conf.getxAxis().setType(AxisType.DATETIME);
         conf.getxAxis().setTitle("Time");
         YAxis yAxis = conf.getyAxis();

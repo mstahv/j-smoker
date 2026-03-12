@@ -249,13 +249,29 @@ public class IBBQThermometer implements AutoCloseable {
                 settingsResponseChar.stopNotify();
             }
             device.disconnect();
+            // Remove device from BlueZ to clear cached GATT state,
+            // so next scan gets fresh characteristic handles
+            if (deviceManager != null) {
+                BluetoothAdapter adapter = deviceManager.getAdapter();
+                if (adapter != null) {
+                    adapter.removeDevice(device.getRawDevice());
+                }
+            }
         } catch (Exception e) {
             LOG.log(Level.FINE, "Error during disconnect", e);
         } finally {
             setState(ConnectionState.DISCONNECTED);
-            if (ownsDeviceManager && deviceManager != null) {
-                deviceManager.closeConnection();
-            }
+        }
+    }
+
+    /**
+     * Closes the shared DeviceManager/DBus connection. Call only at application shutdown.
+     */
+    public static void shutdownBle() {
+        try {
+            DeviceManager.getInstance().closeConnection();
+        } catch (Exception e) {
+            LOG.log(Level.FINE, "Error closing DeviceManager", e);
         }
     }
 
