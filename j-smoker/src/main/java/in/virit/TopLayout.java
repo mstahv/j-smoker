@@ -19,4 +19,9 @@ public class TopLayout extends MainLayout {
             setWidth("160px");
         }};
     }
+
+    @Override
+    protected void addDrawerContent() {
+        super.addDrawerContent();
+    }
 }

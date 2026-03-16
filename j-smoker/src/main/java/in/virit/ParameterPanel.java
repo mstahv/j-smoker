@@ -5,7 +5,7 @@ import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Hr;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.textfield.NumberField;
-import org.vaadin.firitin.util.style.LumoProps;
+import org.vaadin.firitin.util.style.VaadinCssProps;
 
 /**
  * Shared panel for tuning PID and safety parameters.
@@ -57,14 +57,14 @@ class ParameterPanel extends Div {
         var pidGrid = new Div(kpField, kiField, kdField) {{
             getStyle()
                     .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
-                    .set("gap", LumoProps.SPACE_M.var())
+                    .set("gap", VaadinCssProps.GAP_M.var())
                     .set("flex-wrap", "wrap");
         }};
 
         var safetyGrid = new Div(flameThresholdField, flameRecoveryField, woodDropField, lowFuelField) {{
             getStyle()
                     .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
-                    .set("gap", LumoProps.SPACE_M.var())
+                    .set("gap", VaadinCssProps.GAP_M.var())
                     .set("flex-wrap", "wrap");
         }};
 

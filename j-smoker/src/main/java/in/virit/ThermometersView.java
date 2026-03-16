@@ -15,7 +15,8 @@ import in.virit.SmokerHardware.TemperatureReading;
 import org.vaadin.firitin.appframework.MenuItem;
 import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
 import org.vaadin.firitin.layouts.HorizontalFloatLayout;
-import org.vaadin.firitin.util.style.LumoProps;
+import org.vaadin.firitin.util.style.AuraProps;
+import org.vaadin.firitin.util.style.VaadinCssProps;
 import org.vaadin.svgvis.SvgSparkLine;
 import org.vaadin.svgvis.SvgSparkLine.DataPoint;
 
@@ -142,7 +143,7 @@ public class ThermometersView extends VVerticalLayout {
         private final SvgSparkLine sparkLine = new SvgSparkLine(300, 80);
         private final Span notConnected = new Span("Not connected") {{
             getStyle()
-                    .setColor(LumoProps.SECONDARY_TEXT_COLOR.var())
+                    .setColor(VaadinCssProps.TEXT_COLOR_SECONDARY.var())
                     .set("font-style", "italic");
         }};
 
@@ -152,8 +153,8 @@ public class ThermometersView extends VVerticalLayout {
                 setMaxValue(max);
             }};
             timeLabel.getElement().getStyle()
-                    .setFontSize(LumoProps.FONT_SIZE_XS.var())
-                    .setColor(LumoProps.SECONDARY_TEXT_COLOR.var());
+                    .setFontSize(AuraProps.FONT_SIZE_XS.var())
+                    .setColor(VaadinCssProps.TEXT_COLOR_SECONDARY.var());
             gauge.setVisible(false);
             sparkLine.setVisible(false);
             add(new HorizontalFloatLayout(new Span(name), timeLabel), notConnected, gauge, sparkLine);
@@ -171,7 +172,7 @@ public class ThermometersView extends VVerticalLayout {
             timeLabel.setDatetime(latest.timestamp());
 
             boolean stale = Duration.between(latest.timestamp(), Instant.now()).toSeconds() > STALE_THRESHOLD_SECONDS;
-            timeLabel.getElement().getStyle().setColor(stale ? "orange" : LumoProps.SECONDARY_TEXT_COLOR.var());
+            timeLabel.getElement().getStyle().setColor(stale ? "orange" : VaadinCssProps.TEXT_COLOR_SECONDARY.var());
 
             sparkLine.setData(history.stream()
                     .map(r -> DataPoint.of(r.timestamp(), r.temperature()))

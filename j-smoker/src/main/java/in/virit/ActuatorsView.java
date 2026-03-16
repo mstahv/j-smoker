@@ -8,7 +8,7 @@ import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
 import com.vaadin.flow.router.Route;
 import in.virit.slider.NumberSlider;
 import org.vaadin.firitin.appframework.MenuItem;
-import org.vaadin.firitin.util.style.LumoProps;
+import org.vaadin.firitin.util.style.VaadinCssProps;
 
 @Route
 @MenuItem(icon = VaadinIcon.ADJUST)
@@ -81,7 +81,22 @@ public class ActuatorsView extends VerticalLayout {
         });
 
         add(autoWarning, throttle, blowerMode, blowerDuty);
-        setSpacing(LumoProps.SPACE_XL.var());
+        setSpacing(VaadinCssProps.GAP_XL.var());
+
+        // Initialize components with current hardware state
+        int currentThrottle = smokerHardware.getThrottlePercent();
+        throttle.setValue(currentThrottle);
+        throttle.setLabel("Throttle %s".formatted(currentThrottle));
+
+        if (smokerHardware.isBlowerForceOn()) {
+            blowerMode.setValue(BLOWER_ON);
+        } else if (smokerHardware.isBlowerSoftPwmEnabled()) {
+            blowerMode.setValue(BLOWER_PWM);
+            blowerDuty.setValue(smokerHardware.getBlowerDutyPercent());
+            blowerDuty.setLabel("Blower %s".formatted(smokerHardware.getBlowerDutyPercent()));
+            blowerDuty.setVisible(true);
+        }
+
         updateAutoState();
     }
 

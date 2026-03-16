@@ -12,7 +12,8 @@ import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.Route;
 import org.vaadin.firitin.appframework.MenuItem;
-import org.vaadin.firitin.util.style.LumoProps;
+import org.vaadin.firitin.util.style.AuraProps;
+import org.vaadin.firitin.util.style.VaadinCssProps;
 
 import java.lang.management.ManagementFactory;
 
@@ -73,16 +74,16 @@ public class MainView extends VerticalLayout {
                 getStyle()
                         .setDisplay(com.vaadin.flow.dom.Style.Display.GRID)
                         .set("grid-template-columns", "1fr 1fr")
-                        .set("gap", LumoProps.SPACE_XS.var());
+                        .set("gap", VaadinCssProps.GAP_XS.var());
             }};
 
             for (var label : new Span[]{uptimeLabel, versionLabel, heapUsage, heapMax, processMemory, osMemory, cpuUsage}) {
                 label.getStyle()
-                        .setPadding(LumoProps.SPACE_XS.var() + " " + LumoProps.SPACE_S.var())
-                        .setBackground(LumoProps.CONTRAST_5PCT.var())
-                        .setBorderRadius(LumoProps.BORDER_RADIUS_S.var())
+                        .setPadding(VaadinCssProps.PADDING_XS.var() + " " + VaadinCssProps.PADDING_S.var())
+                        .setBackground(AuraProps.SURFACE_COLOR.var())
+                        .setBorderRadius(VaadinCssProps.RADIUS_S.var())
                         .set("font-family", "monospace")
-                        .setFontSize(LumoProps.FONT_SIZE_S.var());
+                        .setFontSize(AuraProps.FONT_SIZE_S.var());
             }
 
             add(grid, gcButton);

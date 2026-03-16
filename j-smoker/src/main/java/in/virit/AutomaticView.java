@@ -16,7 +16,8 @@ import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.router.Route;
 import org.vaadin.firitin.appframework.MenuItem;
 import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
-import org.vaadin.firitin.util.style.LumoProps;
+import org.vaadin.firitin.util.style.AuraProps;
+import org.vaadin.firitin.util.style.VaadinCssProps;
 
 @Route
 @MenuItem(icon = VaadinIcon.MAGIC)
@@ -163,8 +164,8 @@ public class AutomaticView extends VVerticalLayout {
         StateIndicator() {
             add(new H4("State"), badge);
             badge.getStyle()
-                    .setPadding(LumoProps.SPACE_XS.var() + " " + LumoProps.SPACE_M.var())
-                    .setBorderRadius(LumoProps.BORDER_RADIUS_M.var())
+                    .setPadding(VaadinCssProps.PADDING_XS.var() + " " + VaadinCssProps.PADDING_M.var())
+                    .setBorderRadius(VaadinCssProps.RADIUS_M.var())
                     .setFontWeight("bold");
         }
 
@@ -202,14 +203,14 @@ public class AutomaticView extends VVerticalLayout {
             grid.getStyle()
                     .setDisplay(com.vaadin.flow.dom.Style.Display.GRID)
                     .set("grid-template-columns", "1fr 1fr")
-                    .set("gap", LumoProps.SPACE_S.var());
+                    .set("gap", VaadinCssProps.GAP_S.var());
             add(grid);
 
             for (var label : new Span[]{throttleLabel, blowerLabel, chamberLabel, fireLabel, sourceLabel}) {
                 label.getStyle()
-                        .setPadding(LumoProps.SPACE_XS.var() + " " + LumoProps.SPACE_S.var())
-                        .setBackground(LumoProps.CONTRAST_5PCT.var())
-                        .setBorderRadius(LumoProps.BORDER_RADIUS_S.var());
+                        .setPadding(VaadinCssProps.PADDING_XS.var() + " " + VaadinCssProps.PADDING_S.var())
+                        .setBackground(AuraProps.SURFACE_COLOR.var())
+                        .setBorderRadius(VaadinCssProps.RADIUS_S.var());
             }
         }
 
@@ -244,15 +245,15 @@ public class AutomaticView extends VVerticalLayout {
             grid.getStyle()
                     .setDisplay(com.vaadin.flow.dom.Style.Display.GRID)
                     .set("grid-template-columns", "1fr 1fr")
-                    .set("gap", LumoProps.SPACE_XS.var())
-                    .setFontSize(LumoProps.FONT_SIZE_S.var());
+                    .set("gap", VaadinCssProps.GAP_XS.var())
+                    .setFontSize(AuraProps.FONT_SIZE_S.var());
             add(grid);
 
             for (var label : new Span[]{errorLabel, pLabel, iLabel, dLabel, outputLabel, fireRateLabel, chamberRateLabel}) {
                 label.getStyle()
-                        .setPadding(LumoProps.SPACE_XS.var() + " " + LumoProps.SPACE_S.var())
-                        .setBackground(LumoProps.CONTRAST_5PCT.var())
-                        .setBorderRadius(LumoProps.BORDER_RADIUS_S.var())
+                        .setPadding(VaadinCssProps.PADDING_XS.var() + " " + VaadinCssProps.PADDING_S.var())
+                        .setBackground(AuraProps.SURFACE_COLOR.var())
+                        .setBorderRadius(VaadinCssProps.RADIUS_S.var())
                         .set("font-family", "monospace");
             }
         }

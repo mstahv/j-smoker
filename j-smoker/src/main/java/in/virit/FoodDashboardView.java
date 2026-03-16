@@ -21,7 +21,8 @@ import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.router.Route;
 import org.vaadin.firitin.appframework.MenuItem;
 import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
-import org.vaadin.firitin.util.style.LumoProps;
+import org.vaadin.firitin.util.style.AuraProps;
+import org.vaadin.firitin.util.style.VaadinCssProps;
 
 import com.vaadin.flow.component.charts.model.Time;
 
@@ -55,7 +56,7 @@ public class FoodDashboardView extends VVerticalLayout {
         cardsContainer = new Div() {{
             getStyle()
                     .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
-                    .set("gap", LumoProps.SPACE_M.var())
+                    .set("gap", VaadinCssProps.GAP_M.var())
                     .set("flex-wrap", "wrap");
         }};
 
@@ -157,9 +158,9 @@ public class FoodDashboardView extends VVerticalLayout {
             this.probeKey = probeKey;
 
             getStyle()
-                    .setPadding(LumoProps.SPACE_M.var())
-                    .setBackground(LumoProps.CONTRAST_5PCT.var())
-                    .setBorderRadius(LumoProps.BORDER_RADIUS_M.var())
+                    .setPadding(VaadinCssProps.PADDING_M.var())
+                    .setBackground(AuraProps.SURFACE_COLOR.var())
+                    .setBorderRadius(VaadinCssProps.RADIUS_M.var())
                     .set("min-width", "200px")
                     .set("flex", "1");
 
@@ -181,8 +182,8 @@ public class FoodDashboardView extends VVerticalLayout {
                 setWidth("150px");
             }};
 
-            progressLabel.getStyle().setFontSize(LumoProps.FONT_SIZE_S.var());
-            etaLabel.getStyle().setFontSize(LumoProps.FONT_SIZE_S.var());
+            progressLabel.getStyle().setFontSize(AuraProps.FONT_SIZE_S.var());
+            etaLabel.getStyle().setFontSize(AuraProps.FONT_SIZE_S.var());
 
             add(title, temperatureLabel, targetField, progressLabel, etaLabel);
         }
