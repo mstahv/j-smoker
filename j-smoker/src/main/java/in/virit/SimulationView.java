@@ -58,6 +58,7 @@ public class SimulationView extends VVerticalLayout {
 
     // Simulation active indicator
     private final Button simToggle = new Button();
+    private final NumberField simSpeedField = new NumberField("Time acceleration");
 
     public SimulationView(SmokerHardware hardware, SmokerController controller, UiRefresher uiRefresher) {
         this.hardware = hardware;
@@ -71,6 +72,18 @@ public class SimulationView extends VVerticalLayout {
             updateSimToggle();
         });
 
+        // Time acceleration
+        simSpeedField.setMin(1);
+        simSpeedField.setMax(20);
+        simSpeedField.setStep(1);
+        simSpeedField.setValue((double) controller.getSimulationSpeed());
+        simSpeedField.setStepButtonsVisible(true);
+        simSpeedField.setSuffixComponent(new Span("x"));
+        simSpeedField.setWidth("8em");
+        simSpeedField.addValueChangeListener(e -> {
+            if (e.getValue() != null) controller.setSimulationSpeed(e.getValue().intValue());
+        });
+
         // Temperature injection
         chamberTempField.setMin(0);
         chamberTempField.setMax(400);
@@ -82,7 +95,7 @@ public class SimulationView extends VVerticalLayout {
 
         fireTempField.setMin(0);
         fireTempField.setMax(600);
-        fireTempField.setStep(5);
+        fireTempField.setStep(1);
         fireTempField.setValue(200.0);
         fireTempField.setStepButtonsVisible(true);
         fireTempField.setSuffixComponent(new Span("°C"));
@@ -181,7 +194,7 @@ public class SimulationView extends VVerticalLayout {
 
         add(
                 diagram,
-                simToggle,
+                simToggle, simSpeedField,
                 new H4("Temperature input"),
                 new Div(chamberTempField, fireTempField) {{
                     getStyle()

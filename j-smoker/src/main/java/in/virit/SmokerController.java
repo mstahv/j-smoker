@@ -91,14 +91,21 @@ public class SmokerController {
     // Low fuel: PID output above this % of max for extended time while fire temp drops
     private double lowFuelOutputThreshold = 160.0; // 80% of 200
 
+    // Chamber rate feed-forward: multiplier for how aggressively to cut output
+    // when chamber temp is rising (°C/30s * gain = output reduction)
+    private double chamberRateGain = 8.0;
+
     // Durations for sustained condition detection (in ticks, each 5s)
     private static final int LOW_FUEL_TICKS = 24;  // 2 minutes
     private static final int WATER_PAN_TICKS = 24;  // 2 minutes
 
+    // Simulation time acceleration (1 = real-time)
+    private int simulationSpeed = 5;
+
     @Inject
     SmokerHardware hardware;
 
-    private final PidController pid = new PidController(3.0, 0.02, 0.5);
+    private final PidController pid = new PidController(3.0, 0.02, 1.5);
 
     private volatile State state = State.OFF;
     private double setpoint = 120.0;
@@ -110,7 +117,7 @@ public class SmokerController {
     private int waterPanCounter;
 
     // Heating mode: wait before engaging blower
-    private static final int HEATING_BLOWER_WAIT_TICKS = 12; // 1 minute at 5s ticks
+    private static final int HEATING_BLOWER_WAIT_TICKS = 6; // 30s at 5s ticks
     private int heatingNoRiseTicks;
 
     // Diagnostics (read by UI)
@@ -220,10 +227,20 @@ public class SmokerController {
     void tick() {
         if (state == State.OFF) return;
 
+        int iterations = hardware.isSimulationMode() ? simulationSpeed : 1;
+        for (int iter = 0; iter < iterations && state != State.OFF; iter++) {
+            tickOnce();
+        }
+    }
+
+    private void tickOnce() {
         Instant now = Instant.now();
         double dtSeconds = 5.0;
         if (lastTickTime != null) {
             dtSeconds = java.time.Duration.between(lastTickTime, now).toMillis() / 1000.0;
+            if (hardware.isSimulationMode()) {
+                dtSeconds = 5.0; // Fixed step in simulation
+            }
         }
         lastTickTime = now;
 
@@ -283,37 +300,60 @@ public class SmokerController {
         logTick(chamberTemp, fireTemp, fireRate, chamberRate);
     }
 
-    private void tickHeating(double chamberTemp, double fireTemp, double fireRate, double dtSeconds) {
-        // Heating: full throttle, then add blower if fire box doesn't respond
-        hardware.setThrottle(100);
-        lastThrottlePercent = 100;
+    // How far ahead (in multiples of the 30s rate) to anticipate reaching setpoint
+    private static final double HEATING_ANTICIPATION = 2.0; // ~60s lookahead
 
-        if (!Double.isNaN(fireTemp) && fireRate <= 1.0) {
+    private void tickHeating(double chamberTemp, double fireTemp, double fireRate, double dtSeconds) {
+        double error = setpoint - chamberTemp;
+        double chamberRate = hardware.getTemperatureRate(activeChamberSourceKey, RATE_WINDOW_SECONDS);
+
+        // Early transition: if chamber + rate-based lookahead reaches setpoint,
+        // switch to PID-controlled SMOKING to avoid overshoot
+        double predicted = chamberTemp + Math.max(0, chamberRate) * HEATING_ANTICIPATION;
+        if (predicted >= setpoint || chamberTemp >= setpoint) {
+            log("[SMOKER] STATE CHANGE: HEATING → SMOKING (chamber=%.1f°C, predicted=%.1f°C, rate=%+.1f°C/30s)"
+                    .formatted(chamberTemp, predicted, chamberRate));
+            state = State.SMOKING;
+            pid.reset();
+            return;
+        }
+
+        // Scale throttle down as chamber approaches setpoint
+        // Full throttle when far away, proportionally less when close
+        // At 20°C away: 100%, at 5°C away: ~25%
+        int throttle;
+        if (error > 20) {
+            throttle = 100;
+        } else {
+            throttle = Math.max(20, (int) Math.round(error * 100.0 / 20.0));
+        }
+        hardware.setThrottle(throttle);
+        lastThrottlePercent = throttle;
+
+        // Blower logic: engage if fire not rising, ramp down gradually if it is
+        if (!Double.isNaN(fireTemp) && fireRate < 3.0 && error > 10) {
             heatingNoRiseTicks++;
             if (heatingNoRiseTicks >= HEATING_BLOWER_WAIT_TICKS) {
-                // Ramp blower: 10% per tick after wait period, max 100%
-                int blowerPercent = Math.min(100, (heatingNoRiseTicks - HEATING_BLOWER_WAIT_TICKS + 1) * 10);
+                int blowerPercent = Math.min(100, (heatingNoRiseTicks - HEATING_BLOWER_WAIT_TICKS + 1) * 8);
                 hardware.setBlowerDuty(blowerPercent);
                 lastBlowerPercent = blowerPercent;
             }
-        } else {
-            heatingNoRiseTicks = 0;
-            hardware.disableBlower();
-            lastBlowerPercent = 0;
+        } else if (lastBlowerPercent > 0) {
+            // Fire is rising or close to setpoint — gradually ramp blower down
+            int blowerPercent = Math.max(0, lastBlowerPercent - 5);
+            if (blowerPercent > 0) {
+                hardware.setBlowerDuty(blowerPercent);
+            } else {
+                hardware.disableBlower();
+            }
+            lastBlowerPercent = blowerPercent;
         }
 
         lastPidOutput = lastThrottlePercent + lastBlowerPercent;
-        lastError = setpoint - chamberTemp;
+        lastError = error;
         lastPTerm = 0;
         lastITerm = 0;
         lastDTerm = 0;
-
-        // Auto-transition: chamber reaches setpoint
-        if (chamberTemp >= setpoint) {
-            log("[SMOKER] STATE CHANGE: HEATING → SMOKING (chamber reached setpoint %.1f°C)".formatted(chamberTemp));
-            state = State.SMOKING;
-            pid.reset(); // Start PID fresh for smoking phase
-        }
     }
 
     private void tickSmoking(double chamberTemp, double fireTemp, double fireRate, double chamberRate, double dtSeconds) {
@@ -346,6 +386,15 @@ public class SmokerController {
 
         // 3. Low fuel detection
         double output = computePid(chamberTemp, dtSeconds);
+
+        // Feed-forward: if chamber is rising fast, cut output proactively
+        // chamberRate is °C per 30s; e.g. +4 °C/30s → subtract 4*chamberRateGain from output
+        if (chamberRate > 0) {
+            output -= chamberRate * chamberRateGain;
+            output = Math.max(0, output);
+            lastPidOutput = output;
+        }
+
         if (output > lowFuelOutputThreshold && !Double.isNaN(fireTemp) && fireRate < -1.0) {
             lowFuelCounter++;
             if (lowFuelCounter >= LOW_FUEL_TICKS) {
@@ -422,18 +471,17 @@ public class SmokerController {
 
     /**
      * Map PID output 0-200 to throttle (0-100) and blower (0-100).
+     * Blower starts ramping at output 60 for a smooth overlap with throttle,
+     * avoiding a hard cutoff when output drops below 100.
      */
-    private void applyOutput(double output) {
-        int throttle;
-        int blower;
+    private static final double BLOWER_START = 60;
+    private static final double BLOWER_RANGE = 140; // 60..200 → blower 0..100
 
-        if (output <= 100) {
-            throttle = (int) Math.round(output);
-            blower = 0;
-        } else {
-            throttle = 100;
-            blower = (int) Math.round(output - 100);
-        }
+    private void applyOutput(double output) {
+        int throttle = (int) Math.round(Math.min(100, output));
+        int blower = output > BLOWER_START
+                ? (int) Math.round((output - BLOWER_START) * 100.0 / BLOWER_RANGE)
+                : 0;
 
         throttle = Math.max(0, Math.min(100, throttle));
         blower = Math.max(0, Math.min(100, blower));
@@ -545,6 +593,22 @@ public class SmokerController {
 
     public void setLowFuelOutputThreshold(double threshold) {
         this.lowFuelOutputThreshold = threshold;
+    }
+
+    public double getChamberRateGain() {
+        return chamberRateGain;
+    }
+
+    public void setChamberRateGain(double gain) {
+        this.chamberRateGain = gain;
+    }
+
+    public int getSimulationSpeed() {
+        return simulationSpeed;
+    }
+
+    public void setSimulationSpeed(int speed) {
+        this.simulationSpeed = Math.max(1, speed);
     }
 
     public String getActiveChamberSourceKey() {

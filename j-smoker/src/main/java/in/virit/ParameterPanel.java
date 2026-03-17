@@ -23,6 +23,7 @@ class ParameterPanel extends Div {
     private final NumberField flameRecoveryField = safetyField("Flame recovery (°C/30s)", 0, 30, 1);
     private final NumberField woodDropField = safetyField("Wood addition (°C/30s)", -100, 0, 5);
     private final NumberField lowFuelField = safetyField("Low fuel threshold (PID output)", 50, 200, 10);
+    private final NumberField chamberRateGainField = safetyField("Chamber rate gain", 0, 30, 1);
 
     ParameterPanel(SmokerController controller) {
         this.controller = controller;
@@ -54,6 +55,11 @@ class ParameterPanel extends Div {
             if (e.getValue() != null) controller.setLowFuelOutputThreshold(e.getValue());
         });
 
+        chamberRateGainField.setValue(controller.getChamberRateGain());
+        chamberRateGainField.addValueChangeListener(e -> {
+            if (e.getValue() != null) controller.setChamberRateGain(e.getValue());
+        });
+
         var pidGrid = new Div(kpField, kiField, kdField) {{
             getStyle()
                     .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
@@ -61,7 +67,7 @@ class ParameterPanel extends Div {
                     .set("flex-wrap", "wrap");
         }};
 
-        var safetyGrid = new Div(flameThresholdField, flameRecoveryField, woodDropField, lowFuelField) {{
+        var safetyGrid = new Div(flameThresholdField, flameRecoveryField, woodDropField, lowFuelField, chamberRateGainField) {{
             getStyle()
                     .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
                     .set("gap", VaadinCssProps.GAP_M.var())
