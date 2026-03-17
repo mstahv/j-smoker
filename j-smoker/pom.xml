@@ -20,10 +20,11 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
-        <quarkus.platform.version>3.31.3</quarkus.platform.version>
+        <quarkus.platform.version>3.32.3</quarkus.platform.version>
         <skipITs>true</skipITs>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
         <pi4j.version>4.0.0</pi4j.version>
+        <vaadin.version>25.1.0-beta3</vaadin.version>
     </properties>
 
     <dependencyManagement>
@@ -35,6 +36,13 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <dependency>
+                <groupId>com.vaadin</groupId>
+                <artifactId>vaadin-bom</artifactId>
+                <type>pom</type>
+                <scope>import</scope>
+                <version>${vaadin.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -42,7 +50,7 @@
         <dependency>
             <groupId>com.vaadin</groupId>
             <artifactId>vaadin-quarkus-extension</artifactId>
-            <version>25.1.0-beta3</version>
+            <version>${vaadin.version}</version>
         </dependency>
         <dependency>
             <groupId>in.virit</groupId>
@@ -87,10 +95,16 @@
             <artifactId>meater-cloud</artifactId>
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
+
+        <!-- Full Vaadin component set for charts only !? -->
         <dependency>
             <groupId>com.vaadin</groupId>
-            <artifactId>vaadin-charts-flow</artifactId>
-            <version>25.1.0-beta1</version>
+            <artifactId>vaadin</artifactId>
+        </dependency>
+        <!-- Needed for charts component to get registered into front-end bundle -->
+        <dependency>
+            <groupId>com.vaadin</groupId>
+            <artifactId>vaadin-jandex</artifactId>
         </dependency>
 
         <!-- include Pi4J Core -->

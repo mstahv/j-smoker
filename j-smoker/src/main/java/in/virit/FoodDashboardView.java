@@ -158,6 +158,9 @@ public class FoodDashboardView extends VVerticalLayout {
             this.probeKey = probeKey;
 
             getStyle()
+                    .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
+                    .set("flex-direction", "column")
+                    .set("gap", VaadinCssProps.GAP_XS.var())
                     .setPadding(VaadinCssProps.PADDING_M.var())
                     .setBackground(AuraProps.SURFACE_COLOR.var())
                     .setBorderRadius(VaadinCssProps.RADIUS_M.var())

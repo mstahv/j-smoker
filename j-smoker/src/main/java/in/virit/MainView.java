@@ -9,9 +9,12 @@ import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.markdown.Markdown;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.dom.Style;
 import com.vaadin.flow.router.Route;
 import org.vaadin.firitin.appframework.MenuItem;
+import org.vaadin.firitin.components.RichText;
 import org.vaadin.firitin.util.style.AuraProps;
 import org.vaadin.firitin.util.style.VaadinCssProps;
 
@@ -21,24 +24,62 @@ import java.lang.management.ManagementFactory;
 @MenuItem(order = MenuItem.BEGINNING, icon = VaadinIcon.HOME, title = "J-Smoker")
 public class MainView extends VerticalLayout {
 
+    private final SmokerHardware smokerHardware;
     private final UiRefresher uiRefresher;
+    private final AirflowDiagram diagram = new AirflowDiagram();
     private final SystemMonitor systemMonitor = new SystemMonitor();
 
     public MainView(SmokerHardware smokerHardware, UiRefresher uiRefresher) {
+        this.smokerHardware = smokerHardware;
         this.uiRefresher = uiRefresher;
-        add(new Paragraph(
-                "Raspberry Pi-based smoker control system. "
-                + "Monitor burning chamber and chip temperatures with live gauges, "
-                + "and control airflow via the throttle valve and blower."
-        ));
-        add(new Paragraph("Running on: " + smokerHardware.boardName()));
+
+        add(new Div(){{
+            add(new Paragraph("Running on: " + smokerHardware.boardName()));
+            add(new RichText().withMarkDown("""
+            Raspberry Pi based BBQ smoker system, powered by Pi4J, Vaadin, Quarkus.
+            [Source code](https://github.com/mstahv/j-smoker). 
+            """));
+            getStyle().setPosition(Style.Position.ABSOLUTE);
+            setMaxWidth("300px");
+        }});
+        add(diagram);
         add(systemMonitor);
+        updateDiagram();
         systemMonitor.update();
+    }
+
+    private void updateDiagram() {
+        diagram.setThrottlePercent(smokerHardware.getThrottlePercent());
+        int blower = smokerHardware.getBlowerPercent();
+        diagram.setBlowerSpeed(blower);
+        if (smokerHardware.isBlowerForceOn()) {
+            diagram.setBlowerLabel("Blower FULL");
+        } else if (smokerHardware.isBlowerSoftPwmEnabled()) {
+            diagram.setBlowerLabel("Blower PWM %d %%".formatted(smokerHardware.getBlowerDutyPercent()));
+        } else {
+            diagram.setBlowerLabel("Blower OFF");
+        }
+
+        var fire = smokerHardware.getLatestReading(SmokerHardware.PROBE);
+        if (fire != null) {
+            diagram.setFireTemp("%.0f °C".formatted(fire.temperature()));
+        }
+        var chamber = smokerHardware.getLatestReading(SmokerHardware.IBBQ_1);
+        if (chamber != null) {
+            diagram.setFoodChamberTemp("%.0f °C".formatted(chamber.temperature()));
+        }
+        var food = smokerHardware.getLatestReading(SmokerHardware.IBBQ_2);
+        if (food != null) {
+            diagram.setFoodProbeTemp("%.0f °C".formatted(food.temperature()));
+        }
     }
 
     @Override
     protected void onAttach(AttachEvent attachEvent) {
-        uiRefresher.register(attachEvent.getUI(), systemMonitor::update);
+        uiRefresher.register(attachEvent.getUI(), () -> {
+            updateDiagram();
+            systemMonitor.update();
+        });
     }
 
     @Override

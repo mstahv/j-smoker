@@ -1,5 +1,6 @@
 package in.virit;
 
+import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.dependency.StyleSheet;
 import com.vaadin.flow.component.html.Image;
 import com.vaadin.flow.dom.Style;
@@ -23,5 +24,13 @@ public class TopLayout extends MainLayout {
     @Override
     protected void addDrawerContent() {
         super.addDrawerContent();
+    }
+
+    @Override
+    protected void onAttach(AttachEvent attachEvent) {
+        super.onAttach(attachEvent);
+        // slider thumbs are too small for touch devices, let's just re-size them all
+        getStyle().set("--vaadin-slider-thumb-height", "2em");
+        getStyle().set("--vaadin-slider-thumb-width", "2em");
     }
 }

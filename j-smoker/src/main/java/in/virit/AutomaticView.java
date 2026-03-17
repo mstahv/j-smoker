@@ -24,8 +24,10 @@ import org.vaadin.firitin.util.style.VaadinCssProps;
 public class AutomaticView extends VVerticalLayout {
 
     private final SmokerController controller;
+    private final SmokerHardware smokerHardware;
     private final UiRefresher uiRefresher;
 
+    private final AirflowDiagram diagram = new AirflowDiagram();
     private final NumberField setpointField = new NumberField("Target temperature (°C)");
     private final Button startStopButton = new Button();
     private final Select<SmokerController.State> stateSelect = new Select<>();
@@ -34,8 +36,9 @@ public class AutomaticView extends VVerticalLayout {
     private final ActuatorStatus actuatorStatus = new ActuatorStatus();
     private final PidDiagnostics pidDiagnostics = new PidDiagnostics();
 
-    public AutomaticView(SmokerController controller, UiRefresher uiRefresher) {
+    public AutomaticView(SmokerController controller, SmokerHardware smokerHardware, UiRefresher uiRefresher) {
         this.controller = controller;
+        this.smokerHardware = smokerHardware;
         this.uiRefresher = uiRefresher;
 
         setpointField.setMin(60);
@@ -85,7 +88,7 @@ public class AutomaticView extends VVerticalLayout {
             getStyle().set("flex-wrap", "wrap");
         }};
 
-        add(controls, stateIndicator, actuatorStatus, pidDiagnostics, new ParameterPanel(controller));
+        add(diagram, controls, stateIndicator, actuatorStatus, pidDiagnostics, new ParameterPanel(controller));
         updateView();
     }
 
@@ -102,7 +105,32 @@ public class AutomaticView extends VVerticalLayout {
         setpointField.setEnabled(!running);
     }
 
+    private void updateDiagram() {
+        diagram.setThrottlePercent(smokerHardware.getThrottlePercent());
+        diagram.setBlowerSpeed(smokerHardware.getBlowerPercent());
+        if (smokerHardware.isBlowerForceOn()) {
+            diagram.setBlowerLabel("Blower FULL");
+        } else if (smokerHardware.isBlowerSoftPwmEnabled()) {
+            diagram.setBlowerLabel("Blower PWM %d %%".formatted(smokerHardware.getBlowerDutyPercent()));
+        } else {
+            diagram.setBlowerLabel("Blower OFF");
+        }
+        var fire = smokerHardware.getLatestReading(SmokerHardware.PROBE);
+        if (fire != null) {
+            diagram.setFireTemp("%.0f °C".formatted(fire.temperature()));
+        }
+        var chamber = smokerHardware.getLatestReading(SmokerHardware.IBBQ_1);
+        if (chamber != null) {
+            diagram.setFoodChamberTemp("%.0f °C".formatted(chamber.temperature()));
+        }
+        var food = smokerHardware.getLatestReading(SmokerHardware.IBBQ_2);
+        if (food != null) {
+            diagram.setFoodProbeTemp("%.0f °C".formatted(food.temperature()));
+        }
+    }
+
     private void updateView() {
+        updateDiagram();
         updateStartStopButton();
         var state = controller.getState();
 

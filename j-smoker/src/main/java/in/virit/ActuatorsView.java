@@ -2,6 +2,7 @@ package in.virit;
 
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.DetachEvent;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
@@ -23,6 +24,7 @@ public class ActuatorsView extends VerticalLayout {
 
     private final WarningMessage autoWarning = new WarningMessage(
             "Automatic control active — manual controls disabled");
+    private final AirflowDiagram diagram = new AirflowDiagram();
     private final NumberSlider<Integer> throttle;
     private final RadioButtonGroup<String> blowerMode;
     private final NumberSlider<Integer> blowerDuty;
@@ -35,12 +37,14 @@ public class ActuatorsView extends VerticalLayout {
 
         throttle = new NumberSlider<>(Integer.class) {{
             setLabel("Throttle");
+            setWidthFull();
             setMinMaxVisible(true);
             addValueChangeListener(e -> {
                 if (!smokerHardware.isAutomaticControlActive()) {
                     smokerHardware.setThrottle(e.getValue());
-                    setLabel("Throttle %s".formatted(e.getValue()));
+                    setLabel("Throttle %s %%".formatted(e.getValue()));
                 }
+                diagram.setThrottlePercent(e.getValue());
             });
         }};
 
@@ -51,14 +55,21 @@ public class ActuatorsView extends VerticalLayout {
         blowerDuty = new NumberSlider<>(Integer.class) {{
             setLabel("Blower");
             setValue(50);
+            setWidthFull();
             setMinMaxVisible(true);
             setVisible(false);
             addValueChangeListener(e -> {
                 if (!smokerHardware.isAutomaticControlActive()
                         && blowerMode.getValue().equals(BLOWER_PWM)) {
-                    smokerHardware.setBlowerDuty(e.getValue());
-                    setLabel("Blower %s".formatted(e.getValue()));
+                    if (e.getValue() <= 0) {
+                        smokerHardware.disableBlower();
+                    } else {
+                        smokerHardware.setBlowerDuty(e.getValue());
+                    }
+                    setLabel("Blower %s %%".formatted(e.getValue()));
                 }
+                diagram.setBlowerSpeed(e.getValue());
+                diagram.setBlowerLabel("Blower PWM %d %%".formatted(e.getValue()));
             });
         }};
 
@@ -68,34 +79,59 @@ public class ActuatorsView extends VerticalLayout {
                 case BLOWER_OFF -> {
                     smokerHardware.disableBlower();
                     blowerDuty.setVisible(false);
+                    diagram.setBlowerSpeed(0);
+                    diagram.setBlowerLabel("Blower OFF");
                 }
                 case BLOWER_ON -> {
                     smokerHardware.setBlower(true);
                     blowerDuty.setVisible(false);
+                    diagram.setBlowerSpeed(100);
+                    diagram.setBlowerLabel("Blower FULL");
                 }
                 case BLOWER_PWM -> {
                     smokerHardware.setBlowerDuty(blowerDuty.getValue());
                     blowerDuty.setVisible(true);
+                    diagram.setBlowerSpeed(blowerDuty.getValue());
+                    diagram.setBlowerLabel("Blower PWM %d %%".formatted(blowerDuty.getValue()));
                 }
             }
         });
 
-        add(autoWarning, throttle, blowerMode, blowerDuty);
+        diagram.onThrottleDrag(percent -> {
+            if (!smokerHardware.isAutomaticControlActive()) {
+                throttle.setValue(percent);
+            }
+        });
+
+        diagram.onBlowerClick(mode -> {
+            if (smokerHardware.isAutomaticControlActive()) return;
+            switch (mode) {
+                case OFF -> blowerMode.setValue(BLOWER_OFF);
+                case PWM_50 -> {
+                    blowerMode.setValue(BLOWER_PWM);
+                    blowerDuty.setValue(50);
+                }
+                case FULL -> blowerMode.setValue(BLOWER_ON);
+            }
+        });
+
+        add(autoWarning, diagram, throttle, blowerMode, blowerDuty);
         setSpacing(VaadinCssProps.GAP_XL.var());
 
         // Initialize components with current hardware state
         int currentThrottle = smokerHardware.getThrottlePercent();
         throttle.setValue(currentThrottle);
-        throttle.setLabel("Throttle %s".formatted(currentThrottle));
+        diagram.setThrottlePercent(currentThrottle);
 
         if (smokerHardware.isBlowerForceOn()) {
             blowerMode.setValue(BLOWER_ON);
         } else if (smokerHardware.isBlowerSoftPwmEnabled()) {
             blowerMode.setValue(BLOWER_PWM);
             blowerDuty.setValue(smokerHardware.getBlowerDutyPercent());
-            blowerDuty.setLabel("Blower %s".formatted(smokerHardware.getBlowerDutyPercent()));
+            blowerDuty.setLabel("Blower %s %%".formatted(smokerHardware.getBlowerDutyPercent()));
             blowerDuty.setVisible(true);
         }
+        // blowerMode value change listener already syncs the diagram
 
         updateAutoState();
     }
@@ -106,6 +142,12 @@ public class ActuatorsView extends VerticalLayout {
         throttle.setEnabled(!autoActive);
         blowerMode.setEnabled(!autoActive);
         blowerDuty.setEnabled(!autoActive);
+        if (autoActive) {
+            // Sync diagram with hardware state changed by auto-control
+            diagram.setThrottlePercent(smokerHardware.getThrottlePercent());
+            int blower = smokerHardware.getBlowerPercent();
+            diagram.setBlowerSpeed(blower);
+        }
     }
 
     @Override

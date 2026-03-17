@@ -31,6 +31,8 @@ public class SimulationView extends VVerticalLayout {
     private final SmokerController controller;
     private final UiRefresher uiRefresher;
 
+    private final AirflowDiagram diagram = new AirflowDiagram();
+
     // Temperature injection controls
     private final NumberField chamberTempField = new NumberField("Chamber temperature (°C)");
     private final NumberField fireTempField = new NumberField("Fire box temperature (°C)");
@@ -178,6 +180,7 @@ public class SimulationView extends VVerticalLayout {
         }
 
         add(
+                diagram,
                 simToggle,
                 new H4("Temperature input"),
                 new Div(chamberTempField, fireTempField) {{
@@ -272,7 +275,32 @@ public class SimulationView extends VVerticalLayout {
         setpointField.setEnabled(!running);
     }
 
+    private void updateDiagram() {
+        diagram.setThrottlePercent(hardware.getThrottlePercent());
+        diagram.setBlowerSpeed(hardware.getBlowerPercent());
+        if (hardware.isBlowerForceOn()) {
+            diagram.setBlowerLabel("Blower FULL");
+        } else if (hardware.isBlowerSoftPwmEnabled()) {
+            diagram.setBlowerLabel("Blower PWM %d %%".formatted(hardware.getBlowerDutyPercent()));
+        } else {
+            diagram.setBlowerLabel("Blower OFF");
+        }
+        var fire = hardware.getLatestReading(SmokerHardware.PROBE);
+        if (fire != null) {
+            diagram.setFireTemp("%.0f °C".formatted(fire.temperature()));
+        }
+        var chamber = hardware.getLatestReading(SmokerHardware.IBBQ_1);
+        if (chamber != null) {
+            diagram.setFoodChamberTemp("%.0f °C".formatted(chamber.temperature()));
+        }
+        var food = hardware.getLatestReading(SmokerHardware.IBBQ_2);
+        if (food != null) {
+            diagram.setFoodProbeTemp("%.0f °C".formatted(food.temperature()));
+        }
+    }
+
     private void updateStatus() {
+        updateDiagram();
         updateStartStopButton();
         var state = controller.getState();
         stateSelect.setValue(state);
