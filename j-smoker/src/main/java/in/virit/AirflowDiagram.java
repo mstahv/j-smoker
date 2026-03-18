@@ -63,6 +63,7 @@ class AirflowDiagram extends VSvg {
     private final GElement arrowGroup;
     private final List<GElement> flameWrappers;
     private final List<PathElement> flameElements;
+    private final List<PathElement> flameCoreElements;
     private final TextElement throttleText;
     private final TextElement blowerText;
     private final TextElement fireTempText;
@@ -72,8 +73,8 @@ class AirflowDiagram extends VSvg {
 
     private AnimateTransformElement fanAnimation;
     private AnimateMotionElement arrowAnimation;
-    private int currentThrottle;
-    private int currentBlowerSpeed;
+    private int currentThrottle = -1;
+    private int currentBlowerSpeed = -1;
     private Consumer<BlowerMode> blowerClickListener;
     private Consumer<Integer> throttleDragListener;
 
@@ -87,6 +88,42 @@ class AirflowDiagram extends VSvg {
                 .fill(HexColor.of("#8b6914")).stroke(HexColor.of("#5a4510")).strokeWidth(2);
         var fireInner = rect(FIRE_X + 4, FIRE_Y + 4, FIRE_W - 8, FIRE_H - 8, 2)
                 .fill(HexColor.of("#1a1a1a"));
+        // ── wood logs at base of fire ──
+        int logY = FLAME_BASE_Y + 2;
+        int logCx = FIRE_X + FIRE_W / 2;
+        var woodGroup = new GElement();
+        // Two crossed logs
+        var log1 = rect(logCx - 30, logY, 60, 8, 3)
+                .fill(HexColor.of("#6b3a1f")).stroke(HexColor.of("#4a2810")).strokeWidth(0.8);
+        var log2 = rect(logCx - 28, logY - 5, 56, 7, 3)
+                .fill(HexColor.of("#7a4528")).stroke(HexColor.of("#4a2810")).strokeWidth(0.8);
+        // Angled log crossing
+        var log3 = rect(logCx - 22, logY - 9, 44, 6, 2)
+                .fill(HexColor.of("#5c3018")).stroke(HexColor.of("#3a1a08")).strokeWidth(0.8);
+        log1.rotate(-8, logCx, logY + 4);
+        log2.rotate(10, logCx, logY - 1);
+        log3.rotate(-3, logCx, logY - 6);
+        // Wood grain details (small lines)
+        for (int gx = -18; gx <= 18; gx += 12) {
+            woodGroup.add(new PathElement()
+                    .moveTo(logCx + gx, logY + 1)
+                    .lineTo(logCx + gx + 4, logY + 5)
+                    .stroke(HexColor.of("#4a2510")).strokeWidth(0.5).fillOpacity(0));
+        }
+        woodGroup.add(log1);
+        woodGroup.add(log2);
+        woodGroup.add(log3);
+        // Small ember dots around the wood
+        var embers = new GElement();
+        int[] emberX = {-20, -8, 5, 15, 22, -14, 10};
+        int[] emberY = {-2, 3, -4, 1, -1, -6, -7};
+        for (int i = 0; i < emberX.length; i++) {
+            embers.add(new CircleElement()
+                    .center(logCx + emberX[i], logY + emberY[i]).r(1)
+                    .fill(HexColor.of("#ff6600")).fillOpacity(0.6));
+        }
+        woodGroup.add(embers);
+
         int[] flameXOffsets = {18, 34, 50, 64, 76};
         int[] flameHeights = {40, 52, 36, 48, 32};
         // Flicker: different wobble paths and durations per flame for natural look
@@ -100,21 +137,30 @@ class AirflowDiagram extends VSvg {
         int[] flickerDurations = {600, 780, 550, 700, 650};
         var flames = new GElement();
         var flameList = new java.util.ArrayList<PathElement>();
+        var coreList = new java.util.ArrayList<PathElement>();
         var wrapperList = new java.util.ArrayList<GElement>();
         for (int i = 0; i < flameXOffsets.length; i++) {
-            var f = flame(FIRE_X + flameXOffsets[i], FLAME_BASE_Y, flameHeights[i],
+            int fx = FIRE_X + flameXOffsets[i];
+            var f = flame(fx, FLAME_BASE_Y, flameHeights[i],
                     FLAME_COLORS[i].withLuminance(35).withAlpha(0.50));
-            f.appendChild(new AnimateMotionElement()
+            var core = flameCore(fx, FLAME_BASE_Y, flameHeights[i],
+                    FLAME_COLORS[i]);
+            var flameGroup = new GElement();
+            flameGroup.add(f);
+            flameGroup.add(core);
+            flameGroup.appendChild(new AnimateMotionElement()
                     .path(flickerPaths[i])
                     .dur(Duration.ofMillis(flickerDurations[i]))
                     .repeatIndefinitely());
             var wrapper = new GElement();
-            wrapper.add(f);
+            wrapper.add(flameGroup);
             flameList.add(f);
+            coreList.add(core);
             wrapperList.add(wrapper);
             flames.add(wrapper);
         }
         flameElements = List.copyOf(flameList);
+        flameCoreElements = List.copyOf(coreList);
         flameWrappers = List.copyOf(wrapperList);
         var fireInlet = rect(FIRE_X - 1, DUCT_Y, 5, DUCT_H, 0)
                 .fill(HexColor.of("#333333"));
@@ -269,7 +315,7 @@ class AirflowDiagram extends VSvg {
         // ── assemble (painter's order) ──
         getElement().appendChild(
                 defs, hose, arrowGroup,
-                fireOuter, fireInner, flames, fireInlet, fireTempText,
+                fireOuter, fireInner, woodGroup, flames, fireInlet, fireTempText,
                 stones, stoneDetails,
                 foodOuter, foodInner, meat, grillLines,
                 foodChamberTempText, foodProbeTempText,
@@ -277,6 +323,11 @@ class AirflowDiagram extends VSvg {
                 throttleHousing, flapGroup, flapPivot, throttleText, throttleHitArea,
                 blowerHousing, bladeGroup, blowerHub, blowerText, blowerHitArea
         );
+
+        // Set initial flame state (tiny/dim for zero airflow)
+        currentThrottle = 0;
+        currentBlowerSpeed = 0;
+        updateFlames();
 
         // Register client-side drag handler for throttle
         int hitLeft = THROTTLE_X - 8;
@@ -398,8 +449,15 @@ class AirflowDiagram extends VSvg {
         String scaleY = whole + "." + (frac < 10 ? "0" : "") + frac;
         String transform = "translate(0 " + FLAME_BASE_Y + ") scale(1 " + scaleY + ") translate(0 " + (-FLAME_BASE_Y) + ")";
 
+        // Core: brighter yellow-white, slightly more transparent at low airflow
+        int coreLuminance = 60 + airflow * 15 / 500;
+        double coreAlpha = 0.40 + airflow * 0.50 / 500;
+
         for (int i = 0; i < flameElements.size(); i++) {
             flameElements.get(i).fill(FLAME_COLORS[i].withLuminance(luminance).withAlpha(alpha));
+            flameCoreElements.get(i).fill(
+                    FLAME_COLORS[i].withHue(45).withSaturation(100)
+                            .withLuminance(coreLuminance).withAlpha(coreAlpha));
             flameWrappers.get(i).transform(transform);
         }
     }
@@ -458,14 +516,52 @@ class AirflowDiagram extends VSvg {
                 .rotate(rotation, cx, cy);
     }
 
+    /**
+     * Outer flame shape inspired by bonfire SVG: wide base, wavy sides with
+     * indentations that create sub-tongue shapes, tapered forked tip.
+     */
     private static PathElement flame(int x, int y, int h, HslColor color) {
-        double w = h * 0.22;
+        double w = h * 0.20;
         return new PathElement()
-                .moveTo(x, y)
-                .cubicBezierTo(x - w, y - h * 0.5, x - w * 0.6, y - h, x, y - h * 0.85)
-                .cubicBezierTo(x + w * 0.6, y - h, x + w, y - h * 0.5, x, y)
+                // wide base
+                .moveTo(x - w * 0.7, y)
+                // left side: bulge out low
+                .cubicBezierTo(x - w * 1.2, y - h * 0.15, x - w * 1.1, y - h * 0.30, x - w * 0.7, y - h * 0.35)
+                // left indentation (sub-tongue effect)
+                .cubicBezierTo(x - w * 0.4, y - h * 0.38, x - w * 0.5, y - h * 0.42, x - w * 0.6, y - h * 0.50)
+                // left side narrows up
+                .cubicBezierTo(x - w * 0.7, y - h * 0.60, x - w * 0.4, y - h * 0.72, x - w * 0.2, y - h * 0.82)
+                // tip: lean slightly left, taper to point
+                .cubicBezierTo(x - w * 0.08, y - h * 0.92, x - w * 0.02, y - h * 0.98, x, y - h)
+                // right side of tip
+                .cubicBezierTo(x + w * 0.03, y - h * 0.97, x + w * 0.12, y - h * 0.90, x + w * 0.25, y - h * 0.80)
+                // right indentation
+                .cubicBezierTo(x + w * 0.45, y - h * 0.68, x + w * 0.7, y - h * 0.58, x + w * 0.55, y - h * 0.45)
+                // right sub-tongue
+                .cubicBezierTo(x + w * 0.4, y - h * 0.38, x + w * 0.5, y - h * 0.33, x + w * 0.75, y - h * 0.28)
+                // right side base bulge
+                .cubicBezierTo(x + w * 1.1, y - h * 0.18, x + w * 1.15, y - h * 0.08, x + w * 0.7, y)
                 .closePath()
                 .fill(color);
+    }
+
+    /**
+     * Inner core flame: narrower teardrop, brighter yellow-white.
+     */
+    private static PathElement flameCore(int x, int y, int h, HslColor baseColor) {
+        double coreH = h * 0.58;
+        double cw = coreH * 0.20;
+        var coreColor = baseColor.withHue(45).withSaturation(100).withLuminance(70).withAlpha(0.8);
+        return new PathElement()
+                .moveTo(x - cw * 0.4, y)
+                // left side with slight bulge
+                .cubicBezierTo(x - cw * 1.0, y - coreH * 0.25, x - cw * 0.8, y - coreH * 0.55, x - cw * 0.3, y - coreH * 0.78)
+                // tip
+                .cubicBezierTo(x - cw * 0.1, y - coreH * 0.92, x, y - coreH, x + cw * 0.05, y - coreH * 0.95)
+                // right side
+                .cubicBezierTo(x + cw * 0.6, y - coreH * 0.70, x + cw * 0.9, y - coreH * 0.40, x + cw * 0.4, y)
+                .closePath()
+                .fill(coreColor);
     }
 
     private static PathElement arrow(int x, int y) {
