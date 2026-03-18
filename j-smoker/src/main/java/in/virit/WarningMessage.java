@@ -10,9 +10,7 @@ public class WarningMessage extends Span {
         super(text);
         getStyle()
                 .setBackground(AuraProps.ORANGE.var())
-                .setColor(AuraProps.ORANGE_TEXT.var())
                 .setPadding(VaadinCssProps.PADDING_S.var() + " " + VaadinCssProps.PADDING_M.var())
-                .setBorderRadius(VaadinCssProps.RADIUS_M.var())
-                .setWidth("100%");
+                .setBorderRadius(VaadinCssProps.RADIUS_M.var());
     }
 }
