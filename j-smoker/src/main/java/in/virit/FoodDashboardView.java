@@ -2,6 +2,7 @@ package in.virit;
 
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.DetachEvent;
+import com.vaadin.flow.component.Unit;
 import com.vaadin.flow.component.charts.Chart;
 import com.vaadin.flow.component.charts.model.AxisType;
 import com.vaadin.flow.component.charts.model.ChartType;
@@ -17,19 +18,21 @@ import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
+import in.virit.color.Color;
+import in.virit.color.NamedColor;
 import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.router.Route;
 import org.vaadin.firitin.appframework.MenuItem;
+import org.vaadin.firitin.components.html.VSpan;
 import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
+import org.vaadin.firitin.layouts.HorizontalFloatLayout;
 import org.vaadin.firitin.util.style.AuraProps;
 import org.vaadin.firitin.util.style.VaadinCssProps;
 
 import com.vaadin.flow.component.charts.model.Time;
 
-import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.TimeZone;
 
 @Route
 @MenuItem(icon = VaadinIcon.CUTLERY)
@@ -46,25 +49,18 @@ public class FoodDashboardView extends VVerticalLayout {
     private final SmokerHardware hardware;
     private final UiRefresher uiRefresher;
     private final Map<String, ProbeCard> probeCards = new LinkedHashMap<>();
-    private final Div cardsContainer;
+    private final HorizontalFloatLayout cardsContainer = new HorizontalFloatLayout();
     private final Chart chart;
 
     public FoodDashboardView(SmokerHardware hardware, UiRefresher uiRefresher) {
         this.hardware = hardware;
         this.uiRefresher = uiRefresher;
 
-        cardsContainer = new Div() {{
-            getStyle()
-                    .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
-                    .set("gap", VaadinCssProps.GAP_M.var())
-                    .set("flex-wrap", "wrap");
-        }};
-
         addProbeCard(SmokerHardware.IBBQ_2);
         addProbeCard(SmokerHardware.IBBQ_3);
 
         chart = new Chart(ChartType.LINE);
-        chart.setHeight("400px");
+        chart.setHeight(400, Unit.PIXELS);
 
         add(cardsContainer, chart);
         updateView();
@@ -91,7 +87,8 @@ public class FoodDashboardView extends VVerticalLayout {
         Configuration conf = chart.getConfiguration();
         conf.setTitle("Food Temperature History");
         Time time = new Time();
-        time.setTimezoneOffset(-TimeZone.getTimeZone(ZoneId.systemDefault()).getRawOffset() / 60000);
+        // 🤦‍♂️
+        //time.setTimezone(TimeZone.getDefault().toZoneId().toString());
         conf.setTime(time);
         conf.getxAxis().setType(AxisType.DATETIME);
         conf.getxAxis().setTitle("Time");
@@ -151,7 +148,7 @@ public class FoodDashboardView extends VVerticalLayout {
         private final String probeKey;
         private final Span temperatureLabel = new Span();
         private final NumberField targetField;
-        private final Span progressLabel = new Span();
+        private final VSpan progressLabel = new VSpan();
         private final Span etaLabel = new Span();
 
         ProbeCard(String probeKey) {
@@ -216,14 +213,14 @@ public class FoodDashboardView extends VVerticalLayout {
 
             if (current >= target) {
                 progressLabel.setText("Target reached!");
-                progressLabel.getStyle().setColor("#2e7d32");
+                progressLabel.getStyle().setColor(NamedColor.GREEN);
                 etaLabel.setText("");
                 return;
             }
 
             double progress = (current / target) * 100;
             progressLabel.setText("%.0f%% of target".formatted(progress));
-            progressLabel.getStyle().setColor(null);
+            progressLabel.getStyle().setColor((Color) null);
 
             double rate = hardware.getTemperatureRate(probeKey, 3600);
             if (rate <= 0) {

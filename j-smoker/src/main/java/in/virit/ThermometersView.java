@@ -15,13 +15,10 @@ import in.virit.SmokerHardware.TemperatureReading;
 import org.vaadin.firitin.appframework.MenuItem;
 import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
 import org.vaadin.firitin.layouts.HorizontalFloatLayout;
-import org.vaadin.firitin.util.style.AuraProps;
 import org.vaadin.firitin.util.style.VaadinCssProps;
 import org.vaadin.svgvis.SvgSparkLine;
 import org.vaadin.svgvis.SvgSparkLine.DataPoint;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
@@ -84,13 +81,11 @@ public class ThermometersView extends VVerticalLayout {
 
     private void updateMeaterDisplays() {
         if (smokerHardware.isDevMode() || smokerHardware.isMeaterAvailable()) {
-            meaterWarning.setVisible(false);
+            meaterWarning.hide();
         } else if (!smokerHardware.isMeaterConnectionAttempted()) {
-            meaterWarning.setText("Meater Cloud connecting...");
-            meaterWarning.setVisible(true);
+            meaterWarning.showText("Meater Cloud connecting...");
         } else {
-            meaterWarning.setText("Meater Cloud not connected — check MEATER_EMAIL/MEATER_PASSWORD");
-            meaterWarning.setVisible(true);
+            meaterWarning.showText("Meater Cloud not connected — check MEATER_EMAIL/MEATER_PASSWORD");
         }
 
         for (String key : smokerHardware.getMeaterKeys()) {
@@ -107,15 +102,13 @@ public class ThermometersView extends VVerticalLayout {
 
     private void updateIbbqWarning() {
         if (smokerHardware.isDevMode() || smokerHardware.isIbbqAvailable()) {
-            ibbqWarning.setVisible(false);
+            ibbqWarning.hide();
             ibbqReconnectButton.setVisible(false);
         } else if (!smokerHardware.isIbbqConnectionAttempted()) {
-            ibbqWarning.setText("iBBQ thermometer scanning...");
-            ibbqWarning.setVisible(true);
+            ibbqWarning.showText("iBBQ thermometer scanning...");
             ibbqReconnectButton.setVisible(false);
         } else {
-            ibbqWarning.setText("iBBQ thermometer not connected — BLE device not found");
-            ibbqWarning.setVisible(true);
+            ibbqWarning.showText("iBBQ thermometer not connected — BLE device not found");
             ibbqReconnectButton.setVisible(true);
             ibbqReconnectButton.setEnabled(true);
             ibbqReconnectButton.setText("Reconnect iBBQ");
@@ -136,7 +129,6 @@ public class ThermometersView extends VVerticalLayout {
     }
 
     static class ProbeDisplay extends VerticalLayout {
-        private static final long STALE_THRESHOLD_SECONDS = 180;
 
         private final Gauge gauge;
         private final RelativeTime timeLabel = new RelativeTime();
@@ -152,9 +144,6 @@ public class ThermometersView extends VVerticalLayout {
                 setMinValue(min);
                 setMaxValue(max);
             }};
-            timeLabel.getElement().getStyle()
-                    .setFontSize(AuraProps.FONT_SIZE_XS.var())
-                    .setColor(VaadinCssProps.TEXT_COLOR_SECONDARY.var());
             gauge.setVisible(false);
             sparkLine.setVisible(false);
             add(new HorizontalFloatLayout(new Span(name), timeLabel), notConnected, gauge, sparkLine);
@@ -170,9 +159,6 @@ public class ThermometersView extends VVerticalLayout {
             TemperatureReading latest = history.getLast();
             gauge.setValue(latest.temperature());
             timeLabel.setDatetime(latest.timestamp());
-
-            boolean stale = Duration.between(latest.timestamp(), Instant.now()).toSeconds() > STALE_THRESHOLD_SECONDS;
-            timeLabel.getElement().getStyle().setColor(stale ? "orange" : VaadinCssProps.TEXT_COLOR_SECONDARY.var());
 
             sparkLine.setData(history.stream()
                     .map(r -> DataPoint.of(r.timestamp(), r.temperature()))

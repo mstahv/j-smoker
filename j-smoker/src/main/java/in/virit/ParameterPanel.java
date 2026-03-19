@@ -5,6 +5,8 @@ import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Hr;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.textfield.NumberField;
+import com.vaadin.flow.dom.Style;
+import org.vaadin.firitin.layouts.HorizontalFloatLayout;
 import org.vaadin.firitin.util.style.VaadinCssProps;
 
 /**
@@ -60,21 +62,13 @@ class ParameterPanel extends Div {
             if (e.getValue() != null) controller.setChamberRateGain(e.getValue());
         });
 
-        var pidGrid = new Div(kpField, kiField, kdField) {{
-            getStyle()
-                    .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
-                    .set("gap", VaadinCssProps.GAP_M.var())
-                    .set("flex-wrap", "wrap");
-        }};
-
-        var safetyGrid = new Div(flameThresholdField, flameRecoveryField, woodDropField, lowFuelField, chamberRateGainField) {{
-            getStyle()
-                    .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
-                    .set("gap", VaadinCssProps.GAP_M.var())
-                    .set("flex-wrap", "wrap");
-        }};
-
-        add(new H4("PID parameters"), pidGrid, new Hr(), new H4("Safety thresholds"), safetyGrid);
+        add(
+                new H4("PID parameters"),
+                new HorizontalFloatLayout(kpField, kiField, kdField),
+                new Hr(),
+                new H4("Safety thresholds"),
+                new HorizontalFloatLayout(flameThresholdField, flameRecoveryField, woodDropField, lowFuelField, chamberRateGainField)
+        );
     }
 
     private static NumberField pidField(String label, double min, double max, double step) {

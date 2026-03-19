@@ -7,7 +7,6 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Paragraph;
-import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.markdown.Markdown;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -15,8 +14,6 @@ import com.vaadin.flow.dom.Style;
 import com.vaadin.flow.router.Route;
 import org.vaadin.firitin.appframework.MenuItem;
 import org.vaadin.firitin.components.RichText;
-import org.vaadin.firitin.util.style.AuraProps;
-import org.vaadin.firitin.util.style.VaadinCssProps;
 
 import java.lang.management.ManagementFactory;
 
@@ -89,13 +86,13 @@ public class MainView extends VerticalLayout {
 
     static class SystemMonitor extends Div {
 
-        private final Span uptimeLabel = new Span();
-        private final Span versionLabel = new Span();
-        private final Span heapUsage = new Span();
-        private final Span heapMax = new Span();
-        private final Span processMemory = new Span();
-        private final Span osMemory = new Span();
-        private final Span cpuUsage = new Span();
+        private final StatBadge uptimeLabel = new StatBadge("Uptime");
+        private final StatBadge versionLabel = new StatBadge("Version");
+        private final StatBadge heapUsage = new StatBadge("Heap", "%s / %s");
+        private final StatBadge heapMax = new StatBadge("Heap max");
+        private final StatBadge processMemory = new StatBadge("Process RES");
+        private final StatBadge osMemory = new StatBadge("OS mem", "%s / %s");
+        private final StatBadge cpuUsage = new StatBadge("CPU", "%.0f%% proc / %.0f%% sys");
         private final com.sun.management.OperatingSystemMXBean osMx =
                 (com.sun.management.OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
         private final long startTimeMillis = ManagementFactory.getRuntimeMXBean().getStartTime();
@@ -103,7 +100,7 @@ public class MainView extends VerticalLayout {
         SystemMonitor() {
             add(new H4("System monitor"));
 
-            versionLabel.setText("Version: " + readAppVersion());
+            versionLabel.setValue(readAppVersion());
 
             var gcButton = new Button("Run GC", e -> {
                 System.gc();
@@ -111,23 +108,7 @@ public class MainView extends VerticalLayout {
             });
             gcButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
 
-            var grid = new Div(uptimeLabel, versionLabel, heapUsage, heapMax, processMemory, osMemory, cpuUsage) {{
-                getStyle()
-                        .setDisplay(com.vaadin.flow.dom.Style.Display.GRID)
-                        .set("grid-template-columns", "1fr 1fr")
-                        .set("gap", VaadinCssProps.GAP_XS.var());
-            }};
-
-            for (var label : new Span[]{uptimeLabel, versionLabel, heapUsage, heapMax, processMemory, osMemory, cpuUsage}) {
-                label.getStyle()
-                        .setPadding(VaadinCssProps.PADDING_XS.var() + " " + VaadinCssProps.PADDING_S.var())
-                        .setBackground(AuraProps.SURFACE_COLOR.var())
-                        .setBorderRadius(VaadinCssProps.RADIUS_S.var())
-                        .set("font-family", "monospace")
-                        .setFontSize(AuraProps.FONT_SIZE_S.var());
-            }
-
-            add(grid, gcButton);
+            add(new StatGrid(uptimeLabel, versionLabel, heapUsage, heapMax, processMemory, osMemory, cpuUsage), gcButton);
         }
 
         void update() {
@@ -136,26 +117,25 @@ public class MainView extends VerticalLayout {
             long days = uptimeSec / 86400;
             long hours = (uptimeSec % 86400) / 3600;
             long minutes = (uptimeSec % 3600) / 60;
-            uptimeLabel.setText("Uptime: %s".formatted(
-                    days > 0 ? "%dd %dh %dm".formatted(days, hours, minutes)
-                            : hours > 0 ? "%dh %dm".formatted(hours, minutes)
-                            : "%dm".formatted(minutes)));
+            uptimeLabel.setValue(days > 0 ? "%dd %dh %dm".formatted(days, hours, minutes)
+                    : hours > 0 ? "%dh %dm".formatted(hours, minutes)
+                    : "%dm".formatted(minutes));
 
             Runtime rt = Runtime.getRuntime();
             long used = rt.totalMemory() - rt.freeMemory();
             long max = rt.maxMemory();
-            heapUsage.setText("Heap: %s / %s".formatted(mb(used), mb(rt.totalMemory())));
-            heapMax.setText("Heap max: %s".formatted(mb(max)));
+            heapUsage.setValue(mb(used), mb(rt.totalMemory()));
+            heapMax.setValue(mb(max));
 
-            processMemory.setText("Process RES: %s".formatted(mb(readRssBytes())));
+            processMemory.setValue(mb(readRssBytes()));
 
             long totalOs = osMx.getTotalMemorySize();
             long freeOs = osMx.getFreeMemorySize();
-            osMemory.setText("OS mem: %s / %s".formatted(mb(totalOs - freeOs), mb(totalOs)));
+            osMemory.setValue(mb(totalOs - freeOs), mb(totalOs));
 
             double cpuLoad = osMx.getProcessCpuLoad();
             double systemLoad = osMx.getSystemCpuLoad();
-            cpuUsage.setText("CPU: %.0f%% proc / %.0f%% sys".formatted(cpuLoad * 100, systemLoad * 100));
+            cpuUsage.setValue(cpuLoad * 100, systemLoad * 100);
         }
 
         private String mb(long bytes) {

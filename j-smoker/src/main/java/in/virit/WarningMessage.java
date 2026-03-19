@@ -13,4 +13,13 @@ public class WarningMessage extends Span {
                 .setPadding(VaadinCssProps.PADDING_S.var() + " " + VaadinCssProps.PADDING_M.var())
                 .setBorderRadius(VaadinCssProps.RADIUS_M.var());
     }
+
+    public void hide() {
+        setVisible(false);
+    }
+
+    public void showText(String text) {
+        setText(text);
+        setVisible(true);
+    }
 }

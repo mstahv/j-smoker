@@ -10,13 +10,14 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
-import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.router.Route;
+import in.virit.color.Color;
+import in.virit.color.NamedColor;
 import org.vaadin.firitin.appframework.MenuItem;
 import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
-import org.vaadin.firitin.util.style.AuraProps;
+import org.vaadin.firitin.layouts.HorizontalFloatLayout;
 import org.vaadin.firitin.util.style.VaadinCssProps;
 
 @Route
@@ -83,10 +84,7 @@ public class AutomaticView extends VVerticalLayout {
             }
         });
 
-        var controls = new HorizontalLayout(setpointField, startStopButton, stateSelect, chamberSourceSelect) {{
-            setAlignItems(Alignment.BASELINE);
-            getStyle().set("flex-wrap", "wrap");
-        }};
+        var controls = new HorizontalFloatLayout(setpointField, startStopButton, stateSelect, chamberSourceSelect);
 
         add(diagram, controls, stateIndicator, actuatorStatus, pidDiagnostics, new ParameterPanel(controller));
         updateView();
@@ -182,6 +180,16 @@ public class AutomaticView extends VVerticalLayout {
         };
     }
 
+    static Color stateColor(SmokerController.State state) {
+        return switch (state) {
+            case OFF -> NamedColor.GRAY;
+            case HEATING -> NamedColor.DARKORANGE;
+            case SMOKING -> NamedColor.FORESTGREEN;
+            case FLAME_ALERT -> NamedColor.FIREBRICK;
+            case LOW_FUEL -> NamedColor.GOLDENROD;
+        };
+    }
+
     /**
      * State indicator badge with color coding.
      */
@@ -198,18 +206,11 @@ public class AutomaticView extends VVerticalLayout {
         }
 
         void update(SmokerController.State state) {
-            String textColor = "white";
-            String bgColor = switch (state) {
-                case OFF -> "gray";
-                case HEATING -> "#e65100";
-                case SMOKING -> "#2e7d32";
-                case FLAME_ALERT -> "#c62828";
-                case LOW_FUEL -> { textColor = "black"; yield "#f9a825"; }
-            };
+            Color textColor = state == SmokerController.State.LOW_FUEL ? NamedColor.BLACK : NamedColor.WHITE;
             badge.setText(stateLabel(state));
             badge.getStyle()
-                    .setBackground(bgColor)
-                    .setColor(textColor);
+                    .setBackground(stateColor(state).toString())
+                    .setColor(textColor.toString());
         }
     }
 
@@ -218,38 +219,24 @@ public class AutomaticView extends VVerticalLayout {
      */
     static class ActuatorStatus extends Div {
 
-        private final Span throttleLabel = new Span();
-        private final Span blowerLabel = new Span();
-        private final Span chamberLabel = new Span();
-        private final Span fireLabel = new Span();
-        private final Span sourceLabel = new Span();
+        private final StatBadge throttleLabel = new StatBadge("Throttle", "%d%%");
+        private final StatBadge blowerLabel = new StatBadge("Blower", "%d%%");
+        private final StatBadge chamberLabel = new StatBadge("Chamber", "%.1f°C");
+        private final StatBadge fireLabel = new StatBadge("Fire box", "%.1f°C");
+        private final StatBadge sourceLabel = new StatBadge("Source");
 
         ActuatorStatus() {
             add(new H4("Actuators & temperatures"));
 
-            var grid = new Div(throttleLabel, blowerLabel, chamberLabel, fireLabel, sourceLabel);
-            grid.getStyle()
-                    .setDisplay(com.vaadin.flow.dom.Style.Display.GRID)
-                    .set("grid-template-columns", "1fr 1fr")
-                    .set("gap", VaadinCssProps.GAP_S.var());
-            add(grid);
-
-            for (var label : new Span[]{throttleLabel, blowerLabel, chamberLabel, fireLabel, sourceLabel}) {
-                label.getStyle()
-                        .setPadding(VaadinCssProps.PADDING_XS.var() + " " + VaadinCssProps.PADDING_S.var())
-                        .setBackground(AuraProps.SURFACE_COLOR.var())
-                        .setBorderRadius(VaadinCssProps.RADIUS_S.var());
-            }
+            add(new StatGrid(throttleLabel, blowerLabel, chamberLabel, fireLabel, sourceLabel));
         }
 
         void update(int throttle, int blower, double chamberTemp, double fireTemp, String chamberSource) {
-            throttleLabel.setText("Throttle: %d%%".formatted(throttle));
-            blowerLabel.setText("Blower: %d%%".formatted(blower));
-            chamberLabel.setText("Chamber: %s".formatted(
-                    Double.isNaN(chamberTemp) ? "–" : "%.1f°C".formatted(chamberTemp)));
-            fireLabel.setText("Fire box: %s".formatted(
-                    Double.isNaN(fireTemp) ? "–" : "%.1f°C".formatted(fireTemp)));
-            sourceLabel.setText("Source: %s".formatted(chamberSource));
+            throttleLabel.setValue(throttle);
+            blowerLabel.setValue(blower);
+            chamberLabel.setValue(Double.isNaN(chamberTemp) ? "–" : "%.1f°C".formatted(chamberTemp));
+            fireLabel.setValue(Double.isNaN(fireTemp) ? "–" : "%.1f°C".formatted(fireTemp));
+            sourceLabel.setValue(chamberSource);
         }
     }
 
@@ -258,42 +245,28 @@ public class AutomaticView extends VVerticalLayout {
      */
     static class PidDiagnostics extends Div {
 
-        private final Span errorLabel = new Span();
-        private final Span pLabel = new Span();
-        private final Span iLabel = new Span();
-        private final Span dLabel = new Span();
-        private final Span outputLabel = new Span();
-        private final Span fireRateLabel = new Span();
-        private final Span chamberRateLabel = new Span();
+        private final StatBadge errorLabel = new StatBadge("Error", "%+.1f°C");
+        private final StatBadge pLabel = new StatBadge("P", "%.1f");
+        private final StatBadge iLabel = new StatBadge("I", "%.1f");
+        private final StatBadge dLabel = new StatBadge("D", "%.1f");
+        private final StatBadge outputLabel = new StatBadge("PID output", "%.1f / 200");
+        private final StatBadge fireRateLabel = new StatBadge("Fire Δ", "%+.1f°C/30s");
+        private final StatBadge chamberRateLabel = new StatBadge("Chamber Δ", "%+.1f°C/30s");
 
         PidDiagnostics() {
             add(new H4("PID diagnostics"));
 
-            var grid = new Div(errorLabel, outputLabel, pLabel, iLabel, dLabel, fireRateLabel, chamberRateLabel);
-            grid.getStyle()
-                    .setDisplay(com.vaadin.flow.dom.Style.Display.GRID)
-                    .set("grid-template-columns", "1fr 1fr")
-                    .set("gap", VaadinCssProps.GAP_XS.var())
-                    .setFontSize(AuraProps.FONT_SIZE_S.var());
-            add(grid);
-
-            for (var label : new Span[]{errorLabel, pLabel, iLabel, dLabel, outputLabel, fireRateLabel, chamberRateLabel}) {
-                label.getStyle()
-                        .setPadding(VaadinCssProps.PADDING_XS.var() + " " + VaadinCssProps.PADDING_S.var())
-                        .setBackground(AuraProps.SURFACE_COLOR.var())
-                        .setBorderRadius(VaadinCssProps.RADIUS_S.var())
-                        .set("font-family", "monospace");
-            }
+            add(new StatGrid(errorLabel, outputLabel, pLabel, iLabel, dLabel, fireRateLabel, chamberRateLabel));
         }
 
         void update(double error, double p, double i, double d, double output, double fireRate, double chamberRate) {
-            errorLabel.setText("Error: %+.1f°C".formatted(error));
-            pLabel.setText("P: %.1f".formatted(p));
-            iLabel.setText("I: %.1f".formatted(i));
-            dLabel.setText("D: %.1f".formatted(d));
-            outputLabel.setText("PID output: %.1f / 200".formatted(output));
-            fireRateLabel.setText("Fire Δ: %+.1f°C/30s".formatted(fireRate));
-            chamberRateLabel.setText("Chamber Δ: %+.1f°C/30s".formatted(chamberRate));
+            errorLabel.setValue(error);
+            pLabel.setValue(p);
+            iLabel.setValue(i);
+            dLabel.setValue(d);
+            outputLabel.setValue(output);
+            fireRateLabel.setValue(fireRate);
+            chamberRateLabel.setValue(chamberRate);
         }
     }
 }

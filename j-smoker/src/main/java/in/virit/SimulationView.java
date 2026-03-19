@@ -4,7 +4,6 @@ import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
-import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Hr;
 import com.vaadin.flow.component.html.Span;
@@ -14,10 +13,11 @@ import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.router.Route;
+import in.virit.color.NamedColor;
 import org.vaadin.firitin.appframework.MenuItem;
+import org.vaadin.firitin.components.button.VButton;
 import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
-import org.vaadin.firitin.util.style.AuraProps;
-import org.vaadin.firitin.util.style.VaadinCssProps;
+import org.vaadin.firitin.layouts.HorizontalFloatLayout;
 
 /**
  * Simulation view for testing the automation without real hardware.
@@ -44,17 +44,17 @@ public class SimulationView extends VVerticalLayout {
     private final Select<SmokerController.ChamberSource> chamberSourceSelect = new Select<>();
 
     // Status display
-    private final Span stateLabel = new Span();
-    private final Span chamberSourceLabel = new Span();
-    private final Span throttleLabel = new Span();
-    private final Span blowerLabel = new Span();
-    private final Span pidOutputLabel = new Span();
-    private final Span errorLabel = new Span();
-    private final Span pLabel = new Span();
-    private final Span iLabel = new Span();
-    private final Span dLabel = new Span();
-    private final Span fireRateLabel = new Span();
-    private final Span chamberRateLabel = new Span();
+    private final StatBadge stateLabel = new StatBadge("State");
+    private final StatBadge chamberSourceLabel = new StatBadge("Active source");
+    private final StatBadge throttleLabel = new StatBadge("Throttle", "%d%%");
+    private final StatBadge blowerLabel = new StatBadge("Blower", "%d%%");
+    private final StatBadge pidOutputLabel = new StatBadge("PID output", "%.1f / 200");
+    private final StatBadge errorLabel = new StatBadge("Error", "%+.1f°C");
+    private final StatBadge pLabel = new StatBadge("P", "%.1f");
+    private final StatBadge iLabel = new StatBadge("I", "%.1f");
+    private final StatBadge dLabel = new StatBadge("D", "%.1f");
+    private final StatBadge fireRateLabel = new StatBadge("Fire Δ", "%+.1f°C/30s");
+    private final StatBadge chamberRateLabel = new StatBadge("Chamber Δ", "%+.1f°C/30s");
 
     // Simulation active indicator
     private final Button simToggle = new Button();
@@ -151,74 +151,40 @@ public class SimulationView extends VVerticalLayout {
         });
 
         // Scenario buttons
-        var flameButton = new Button("Simulate flame", e -> simulateFlame());
-        flameButton.getStyle().setBackground("#ffcdd2");
-
-        var woodButton = new Button("Simulate wood addition", e -> simulateWoodAddition());
-        woodButton.getStyle().setBackground("#fff9c4");
-
-        var lowFuelButton = new Button("Simulate low fuel", e -> simulateLowFuel());
-        lowFuelButton.getStyle().setBackground("#ffe0b2");
-
-        var scenarioBar = new Div(flameButton, woodButton, lowFuelButton) {{
-            getStyle()
-                    .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
-                    .set("gap", VaadinCssProps.GAP_S.var())
-                    .set("flex-wrap", "wrap");
+        var flameButton = new VButton("Simulate flame", e -> simulateFlame()){{
+            getStyle().setBackgroundColor(NamedColor.LIGHTPINK);
         }};
 
-        // Status grid
-        var statusGrid = new Div(
-                stateLabel, chamberSourceLabel,
-                throttleLabel, blowerLabel,
-                pidOutputLabel, errorLabel,
-                pLabel, iLabel,
-                dLabel, fireRateLabel,
-                chamberRateLabel
-        ) {{
-            getStyle()
-                    .setDisplay(com.vaadin.flow.dom.Style.Display.GRID)
-                    .set("grid-template-columns", "1fr 1fr")
-                    .set("gap", VaadinCssProps.GAP_XS.var());
+        var woodButton = new VButton("Simulate wood addition", e -> simulateWoodAddition()){{
+            getStyle().setBackgroundColor(NamedColor.LEMONCHIFFON);
         }};
-
-        for (var label : new Span[]{stateLabel, chamberSourceLabel, throttleLabel, blowerLabel,
-                pidOutputLabel, errorLabel, pLabel, iLabel, dLabel, fireRateLabel, chamberRateLabel}) {
-            label.getStyle()
-                    .setPadding(VaadinCssProps.PADDING_XS.var() + " " + VaadinCssProps.PADDING_S.var())
-                    .setBackground(AuraProps.SURFACE_COLOR.var())
-                    .setBorderRadius(VaadinCssProps.RADIUS_S.var())
-                    .set("font-family", "monospace")
-                    .setFontSize(AuraProps.FONT_SIZE_S.var());
-        }
+        var lowFuelButton = new VButton("Simulate low fuel", e -> simulateLowFuel()){{
+            getStyle().setBackgroundColor(NamedColor.NAVAJOWHITE);
+        }};
 
         add(
                 diagram,
                 simToggle, simSpeedField,
                 new H4("Temperature input"),
-                new Div(chamberTempField, fireTempField) {{
-                    getStyle()
-                            .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
-                            .set("gap", VaadinCssProps.GAP_M.var())
-                            .set("flex-wrap", "wrap");
-                }},
+                new HorizontalFloatLayout(chamberTempField, fireTempField),
                 new Hr(),
                 new H4("Automatic control"),
-                new Div(setpointField, startStopButton, stateSelect, chamberSourceSelect) {{
-                    getStyle()
-                            .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
-                            .set("gap", VaadinCssProps.GAP_M.var())
-                            .set("flex-wrap", "wrap")
-                            .set("align-items", "baseline");
-                }},
+                new HorizontalFloatLayout(setpointField, startStopButton, stateSelect, chamberSourceSelect),
                 new Hr(),
                 new H4("Scenarios"),
-                scenarioBar,
+                new HorizontalFloatLayout(flameButton, woodButton, lowFuelButton),
                 new Hr(),
                 new ParameterPanel(controller),
                 new Hr(),
                 new H4("Status & diagnostics"),
-                statusGrid
+                new StatGrid(
+                        stateLabel, chamberSourceLabel,
+                        throttleLabel, blowerLabel,
+                        pidOutputLabel, errorLabel,
+                        pLabel, iLabel,
+                        dLabel, fireRateLabel,
+                        chamberRateLabel
+                )
         );
 
         updateStatus();
@@ -318,26 +284,19 @@ public class SimulationView extends VVerticalLayout {
         var state = controller.getState();
         stateSelect.setValue(state);
 
-        String stateColor = switch (state) {
-            case OFF -> "gray";
-            case HEATING -> "#e65100";
-            case SMOKING -> "#2e7d32";
-            case FLAME_ALERT -> "#c62828";
-            case LOW_FUEL -> "#f9a825";
-        };
-        stateLabel.setText("State: %s".formatted(AutomaticView.stateLabel(state)));
-        stateLabel.getStyle().setColor(stateColor).setFontWeight("bold");
+        stateLabel.setValue(AutomaticView.stateLabel(state));
+        stateLabel.getStyle().setColor(AutomaticView.stateColor(state)).setFontWeight("bold");
 
-        chamberSourceLabel.setText("Active source: %s".formatted(controller.getActiveChamberSourceKey()));
-        throttleLabel.setText("Throttle: %d%%".formatted(controller.getLastThrottlePercent()));
-        blowerLabel.setText("Blower: %d%%".formatted(controller.getLastBlowerPercent()));
-        pidOutputLabel.setText("PID output: %.1f / 200".formatted(controller.getLastPidOutput()));
-        errorLabel.setText("Error: %+.1f°C".formatted(controller.getLastError()));
-        pLabel.setText("P: %.1f".formatted(controller.getLastPTerm()));
-        iLabel.setText("I: %.1f".formatted(controller.getLastITerm()));
-        dLabel.setText("D: %.1f".formatted(controller.getLastDTerm()));
-        fireRateLabel.setText("Fire Δ: %+.1f°C/30s".formatted(controller.getLastFireRate()));
-        chamberRateLabel.setText("Chamber Δ: %+.1f°C/30s".formatted(controller.getLastChamberRate()));
+        chamberSourceLabel.setValue(controller.getActiveChamberSourceKey());
+        throttleLabel.setValue(controller.getLastThrottlePercent());
+        blowerLabel.setValue(controller.getLastBlowerPercent());
+        pidOutputLabel.setValue(controller.getLastPidOutput());
+        errorLabel.setValue(controller.getLastError());
+        pLabel.setValue(controller.getLastPTerm());
+        iLabel.setValue(controller.getLastITerm());
+        dLabel.setValue(controller.getLastDTerm());
+        fireRateLabel.setValue(controller.getLastFireRate());
+        chamberRateLabel.setValue(controller.getLastChamberRate());
 
         // Drain and show alerts
         for (String alert : controller.drainAlerts()) {
