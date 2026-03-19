@@ -1,6 +1,7 @@
 package in.virit;
 
 import com.vaadin.flow.component.AttachEvent;
+import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -30,15 +31,13 @@ public class MainView extends VerticalLayout {
         this.smokerHardware = smokerHardware;
         this.uiRefresher = uiRefresher;
 
-        add(new Div(){{
-            add(new Paragraph("Running on: " + smokerHardware.boardName()));
-            add(new RichText().withMarkDown("""
-            Raspberry Pi based BBQ smoker system, powered by Pi4J, Vaadin, Quarkus.
-            [Source code](https://github.com/mstahv/j-smoker). 
-            """));
-            getStyle().setPosition(Style.Position.ABSOLUTE);
-            setMaxWidth("300px");
-        }});
+        add(new DiagramViewInfo(
+                new RichText().withMarkDown("""
+                    BBQ smoker system, powered by Pi4J, Vaadin, Quarkus.
+                    [Source code](https://github.com/mstahv/j-smoker). 
+                    """),
+                new Paragraph("Running on: " + smokerHardware.boardName()))
+        );
         add(diagram);
         add(systemMonitor);
         updateDiagram();
@@ -163,6 +162,17 @@ public class MainView extends VerticalLayout {
             } catch (Exception ignored) {
             }
             return -1;
+        }
+    }
+
+    private static class DiagramViewInfo extends Div {
+        public DiagramViewInfo(Component... content) {
+            getStyle().setPosition(Style.Position.ABSOLUTE);
+            getStyle().set("font-style", "italic");
+            setMaxWidth("250px");
+            for (var c : content) {
+                add(c);
+            }
         }
     }
 }

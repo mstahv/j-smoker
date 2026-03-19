@@ -4,15 +4,20 @@ An intelligent Java-based system for controlling and monitoring smoker temperatu
 
 ## 📋 Overview
 
-J-Smoker is a Java application designed to automate temperature control for smoking food. The system uses:
+J-Smoker is a Java application designed to automate temperature control for smoking food. The system uses (and the used harware in the only known "production setup"):
 
-- A blower motor for air circulation
-- A servo motor to control the carburetor valve
-- Bluetooth and thermocouple temperature sensors
-- Raspberry Pi Zero 2 W as the control unit
-- Pi4J library for hardware interaction
+- A blower motor for air circulation. (*centrifucal blower fan 5015 12V*, used in e.g. 3d printing setups). Controlled with a basic mosfet transistor via GPIO.
+- A servo motor to control a broken chainsaw carburetor valve. ([micro servo](https://www.waveshare.com/product/robotics/motors-servos/servos/mg996r-servo.htm)) 
+- Bluetooth and thermocouple temperature sensors ([amplifier](https://www.triopak.fi/fi/tuote/ADA-4101), [probe](https://www.triopak.fi/fi/tuote/UT-T05),  ibbq (Some similar to [this](https://www.alibaba.com/product-detail/Hyperbbq-AT-02-smart-wireless-thermometer_1600464854717.html), mine probably older model or different brand), [Meater](https://meater.com) (bluetooht, but conneted via cloud API)) 
+- Raspberry Pi Zero 2 W as the control unit, with whopping 512 mb of ram 😎
+- [Pi4J library](https://www.pi4j.com) for hardware interaction
 
-This automation eliminates the need for manual valve adjustments and provides more consistent smoking temperatures, making the smoking process less stressful and more enjoyable.
+
+**Note, if you want to re-build your own system based on this, you can probably quite easily change the attached electronics.*
+
+The actuators can be used manually via web/PWA appo, but as the automation developes, it hopefully eliminates the need for manual valve adjustments and provides more consistent smoking temperatures, making the smoking process less stressful and more enjoyable.
+
+Dashboard and for temperatures and progress of the food.
 
 ## 🔥 Features
 
@@ -32,39 +37,53 @@ This automation eliminates the need for manual valve adjustments and provides mo
 - **Bluetooth Temperature Sensor** for wireless monitoring
 - **Thermocouple Sensor** for direct temperature measurement
 - **Old Motor Saw Carburetor** (modified for servo control)
-
-### Optional Components
-- **Power Supply**: Adequate power for Raspberry Pi and motors
+- **Power Supply**: Adequate power for Raspberry Pi and motors. My setup is run via 12v battery, smoking continuews even if Trump or Putin shuts down the lights.
 - **Enclosure**: Protective case for electronics
-- **Cooling**: Heat sinks or fans for Raspberry Pi
-
-### Wiring Diagram
-
-```
-Raspberry Pi GPIO → Servo Motor (PWM control)
-Raspberry Pi GPIO → Blower Motor (PWM/Relay control)
-Raspberry Pi Bluetooth → Bluetooth Temperature Sensor
-Raspberry Pi GPIO → Thermocouple Interface (ADC)
-```
+- **Cooling**: Heat sinks or fans for Raspberry Pi (might be needed in warmer operation temperatures or when more load for the app)
 
 ## 💻 Software Requirements
 
-- **Java 25** (OpenJDK recommended)
-- **Raspberry Pi OS** (32-bit or 64-bit)
+- **Java 25**
+- **Raspberry Pi OS**
 - **Quarkus Framework** (lightweight Java server)
-- **Pi4J Library** (v4.0-SNAPSHOT - requires local build)
+- **Pi4J Library**
 - **Maven** (for dependency management)
-- **Git** (for version control)
 
-## 🚀 Installation
+## 🚀 Installation/Development
 
-### Prerequisites
+### Clone and Build
 
-1. **Set up Raspberry Pi**:
-   ```bash
-   sudo apt update && sudo apt upgrade -y
-   sudo apt install openjdk-11-jdk maven git -y
-   ```
+*Note, this you can do on your workstation, if you have Docker up and running*
+
+```bash
+git clone https://github.com/mstahv/j-smoker.git
+cd j-smoker
+mvn install
+```
+
+The top-level POM is an aggregator that builds all modules in the correct order — library modules first, then the main application. The modules are independent (no shared parent POM) so they can also be built individually or moved to separate repositories.
+
+### Running the Application/Server
+
+You can test the web UI (in *j-smoker*) also locally on your workstation, the hardware if simulated if not running on Raspberry Pi. You probably want to open in IDE and run Quarkus app from there. On CLI
+
+```bash
+cd j-smoker
+# Development mode (hot reload)
+./mvn quarkus:dev
+
+# Production mode
+./mvn package
+java -jar target/quarkus-app/quarkus-run.jar --config config.properties
+```
+
+### Deploying
+
+#### Prerequisites on a Server
+
+1. **Set up Raspberry Pi** for Java execution:
+
+   Check e.g. [Pi4J instructions](https://www.pi4j.com/getting-started/java-development-on-the-raspberry-pi-with-vsc/), although they are probably bit too extensive if you only execute Java, like I do.
 
 2. **Enable GPIO and I2C**:
    ```bash
@@ -73,137 +92,67 @@ Raspberry Pi GPIO → Thermocouple Interface (ADC)
    # Navigate to: Interface Options → SPI → Enable
    ```
 
-### Clone the Repository
+// TODO hardware PWM for servo
+3. **Configure hardware PWM**:
 
-```bash
-git clone https://github.com/yourusername/j-smoker.git
-cd j-smoker
-```
+   Add to config.txt:
 
-### Build the Project
+   ```
+   dtoverlay=pwm,pin=12,func=4
+   ```
+Then "just run" on the Pi.
 
-```bash
-mvn clean package
-```
+### Deployment tips
 
-### Install Dependencies
+ I suggest to use  e.g. [boot2vm](https://github.com/mstahv/boot2vm) to deploy to your Raspberry Pi. That rsyncs only the changed parts of the app, uses systemd service and a separate user for deployment. Note, you might need to add the generated user to certain groups to allow hardware access (i2c,gpio). 
 
-```bash
-# Install Quarkus CLI (optional but recommended)
-curl -Ls https://sh.jbang.dev | bash -s - trust add https://repo1.maven.org/maven2/io/quarkus/quarkus-cli/
-mvn wrapper:wrapper
-
-# Install Pi4J v4.0-SNAPSHOT (requires local build)
-# First, clone and build Pi4J from source:
-git clone https://github.com/Pi4J/pi4j-v4.git
-cd pi4j-v4
-mvn clean install -DskipTests
-
-# Then install the required dependencies:
-mvn dependency:get -Dartifact=com.pi4j:pi4j-core:4.0-SNAPSHOT
-mvn dependency:get -Dartifact=com.pi4j:pi4j-plugin-raspberrypi:4.0-SNAPSHOT
-mvn dependency:get -Dartifact=io.quarkus:quarkus-bom:3.9.0
-```
-
-## 🎛️ Configuration
-
-Create a `config.properties` file in the project root:
-
-```properties
-# Temperature Settings
-target.temperature=225
-max.temperature=275
-min.temperature=180
-
-# Hardware Settings
-servo.pin=18
-blower.pin=17
-thermocouple.pin=4
-
-# Control Parameters
-pid.kp=1.0
-pid.ki=0.1
-pid.kd=0.01
-control.interval=5
-
-# Sensor Configuration
-bluetooth.sensor.name=Smoker-Probe
-bluetooth.sensor.address=XX:XX:XX:XX:XX:XX
-```
-
-## 🔧 Usage
-
-### Running the Application
-
-```bash
-# Development mode (hot reload)
-./mvnw quarkus:dev
-
-# Production mode
-./mvnw package
-java -jar target/quarkus-app/quarkus-run.jar --config config.properties
-```
-
-### Command Line Options
-
-```
-Usage: java -jar quarkus-run.jar [options]
-
-Options:
-  --config <file>      Path to configuration file (default: config.properties)
-  --debug              Enable debug logging
-  --simulate           Run in simulation mode (no hardware control)
-  --help               Show this help message
-  --quarkus.http.port  Set HTTP port (default: 8080)
-```
-
-### Web Interface (Vaadin)
-
-The web interface is built with **Vaadin** and accessible at `http://<raspberry-pi-ip>:8080` for:
-- Real-time temperature monitoring with interactive charts
-- Manual control override for servo and blower
-- Configuration adjustments with immediate feedback
-- Historical data visualization and export
-- Responsive design that works on desktop and mobile devices
+If you want to expose your smoker to "interwebs" from your local private network, check e.g. Cloudflare Tunnel or ngrok as easy options.
 
 ## Project Structure
 
-The repository contains three modules:
-
-### `j-smoker/` — Main Application
+### [`j-smoker/`](j-smoker/README.md) — Main Application
 
 Quarkus + Vaadin web application that runs on the Raspberry Pi. Provides a web UI for controlling the smoker (servo, fan) and monitoring temperatures with live-updating gauges and sparkline charts.
 
-### `mcp9600/` — MCP9600 Java Library
+### [`mcp9600/`](mcp9600/README.md) — MCP9600 Java Library
 
-A standalone, reusable Java library for the [MCP9600](https://www.microchip.com/en-us/product/mcp9600) thermocouple amplifier over I2C, built on Pi4J 4.0.0. Can be used independently in any Pi4J project. See [`mcp9600/README.md`](mcp9600/README.md) for API details and usage examples.
+A standalone, reusable Java library for the [MCP9600](https://www.microchip.com/en-us/product/mcp9600) thermocouple amplifier over I2C, built on Pi4J 4.0.0. Can be used independently in any Pi4J project.
 
-### `pwmchip/` — Linux sysfs PWM Library
+### [`pwmchip/`](pwmchip/README.md) — Linux sysfs PWM Library
 
-A standalone, zero-dependency Java library for controlling hardware PWM channels via Linux sysfs (`/sys/class/pwm/`). Includes an abstract `Servo` base class and a ready-made `Sg90Servo` implementation. Works on any Linux board with hardware PWM — no Pi4J required. See [`pwmchip/README.md`](pwmchip/README.md) for API details.
+A standalone, zero-dependency Java library for controlling hardware PWM channels via Linux sysfs (`/sys/class/pwm/`). Includes an abstract `Servo` base class and a ready-made `Sg90Servo` implementation. Works on any Linux board with hardware PWM — no Pi4J required.
 
-### `ibbq/` — iBBQ BLE Thermometer Library
+### [`ibbq/`](ibbq/README.md) — iBBQ BLE Thermometer Library
 
-A standalone Java library for connecting to iBBQ-protocol BLE thermometers and streaming temperature data. Built on [bluez-dbus](https://github.com/hypfvieh/bluez-dbus) (Maven Central, no custom repositories). Tested with a KOBE "xBBQ" 2-probe wireless thermometer on Raspberry Pi. See [`ibbq/README.md`](ibbq/README.md) for API details and usage examples.
+A standalone Java library for connecting to iBBQ-protocol BLE thermometers and streaming temperature data. Built on [bluez-dbus](https://github.com/hypfvieh/bluez-dbus) (Maven Central, no custom repositories). Tested with a KOBE "xBBQ" 2-probe wireless thermometer on Raspberry Pi.
+
+### [`meater/`](meater/README.md) — Meater BLE Thermometer Library
+
+A Java library for communicating with Meater BLE thermometer probes directly on Linux via BlueZ D-Bus. Currently not used: reverse engineering new newer Meater Pro
+probes is not functioning properly. Using the `meater-cloud` instead.
+
+### `meater-cloud/` — Meater Cloud API Client
+
+A client library for reading Meater probe temperatures via the Meater cloud REST API.
 
 ## 🔌 Hardware Setup
 
-### Servo Motor Connection
+### Servo Motor (Throttle)
 
-1. Connect servo signal wire to GPIO pin 18 (PWM0)
-2. Connect power (5V) and ground to appropriate pins
-3. Ensure proper power supply for servo (may need external power)
+- Connected via hardware PWM: sysfs `pwmchip0/pwm0` (enable with `dtoverlay=pwm,pin=12,func=4` in config.txt)
+- Controlled as an SG90-compatible servo (50 Hz, 0.5–2.4 ms pulse range)
+- Throttle range mapped to 20°–75° servo angle
 
-### Blower Motor Connection
+### Blower Motor
 
-1. Use a transistor or relay module for motor control
-2. Connect control pin to GPIO pin 17
-3. Ensure proper power supply for blower motor
+- Controlled via GPIO **25** through a MOSFET transistor
+- Software PWM with 10-second cycle for gentle on/off control
 
 ### Temperature Sensors
 
-1. **Bluetooth Sensor**: Pair with Raspberry Pi via Bluetooth settings
-2. **Thermocouple**: Connect to ADC input on GPIO pin 4
+- **Thermocouple (MCP9600)**: I2C bus 1, address `0x67` — wired to the Pi's I2C pins (SDA/SCL)
+- **iBBQ BLE thermometer**: Paired via Bluetooth, no wiring needed
+- **Meater**: Connected via cloud API, no direct hardware connection
 
 ## 🤖 Control Algorithm
 
@@ -223,48 +172,6 @@ Logs are stored in `logs/j-smoker.log` with the following information:
 - System events and warnings
 - Error conditions
 
-## 🛠️ Development
-
-### Building from Source
-
-```bash
-# Build with Quarkus
-./mvnw clean package
-
-# Build native executable (for Raspberry Pi)
-./mvnw package -Dnative -Dquarkus.native.container-build=true
-```
-
-### Running Tests
-
-```bash
-# Run unit tests
-./mvnw test
-
-# Run integration tests
-./mvnw verify
-```
-
-### Quarkus Development Tools
-
-```bash
-# Add extensions
-./mvnw quarkus:add-extension -Dextensions="vaadin,rest,jdbc-postgresql"
-
-# Create native image
-./mvnw package -Dnative
-
-# Build container image
-./mvnw package -Dquarkus.container-image.build=true
-```
-
-### IDE Setup
-
-Recommended IDEs:
-- IntelliJ IDEA with Java and Maven plugins
-- Eclipse with m2e plugin
-- VS Code with Java Extension Pack
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please follow these guidelines:
@@ -277,7 +184,7 @@ Contributions are welcome! Please follow these guidelines:
 
 ### Code Style
 
-- Follow Google Java Style Guide
+- Follow Java Style Guide
 - Use meaningful variable and method names
 - Include Javadoc comments for public methods
 - Write unit tests for new functionality
@@ -288,25 +195,17 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- [Pi4J](https://pi4j.com/) for excellent Raspberry Pi Java support
-- [Waveshare](https://www.waveshare.com/) for quality hardware components
-- The BBQ community for inspiration and feedback
+- [Pi4J](https://pi4j.com/)
+- [Vaadin](https://vaadin.com/)
+- [Quarkus](https://quarkus.io/)
 
 ## 📞 Support
 
 For issues, questions, or suggestions:
 - Open an issue on GitHub
-- Join our community forum
-- Check the wiki for detailed documentation
 
 ## 🎯 Roadmap
 
-- [ ] Mobile app for remote monitoring
-- [ ] Cloud integration for data logging
 - [ ] Machine learning for temperature prediction
-- [ ] Multi-zone temperature control
-- [ ] Voice control integration
+- [ ] LLM-Yolo smoking mode: local LLM, instruct what you put inside and let LLM decide how it is smoked
 
----
-
-© 2023 J-Smoker Project. All rights reserved.
