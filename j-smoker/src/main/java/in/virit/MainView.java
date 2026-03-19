@@ -1,17 +1,11 @@
 package in.virit;
 
-import com.vaadin.flow.component.AttachEvent;
-import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.markdown.Markdown;
-import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.dom.Style;
 import com.vaadin.flow.router.Route;
 import org.vaadin.firitin.appframework.MenuItem;
 import org.vaadin.firitin.components.RichText;
@@ -20,67 +14,29 @@ import java.lang.management.ManagementFactory;
 
 @Route
 @MenuItem(order = MenuItem.BEGINNING, icon = VaadinIcon.HOME, title = "J-Smoker")
-public class MainView extends VerticalLayout {
+public class MainView extends AbstractDiagramView {
 
-    private final SmokerHardware smokerHardware;
-    private final UiRefresher uiRefresher;
-    private final AirflowDiagram diagram = new AirflowDiagram();
     private final SystemMonitor systemMonitor = new SystemMonitor();
 
     public MainView(SmokerHardware smokerHardware, UiRefresher uiRefresher) {
-        this.smokerHardware = smokerHardware;
-        this.uiRefresher = uiRefresher;
+        super(smokerHardware, uiRefresher);
 
         add(new DiagramViewInfo(
                 new RichText().withMarkDown("""
-                    BBQ smoker system, powered by Pi4J, Vaadin, Quarkus.
-                    [Source code](https://github.com/mstahv/j-smoker). 
+                    Wellcome to J-Smoker! Powered by Pi4J, Vaadin, Quarkus.
+                    [Source code](https://github.com/mstahv/j-smoker).
                     """),
                 new Paragraph("Running on: " + smokerHardware.boardName()))
         );
-        add(diagram);
         add(systemMonitor);
         updateDiagram();
         systemMonitor.update();
     }
 
-    private void updateDiagram() {
-        diagram.setThrottlePercent(smokerHardware.getThrottlePercent());
-        int blower = smokerHardware.getBlowerPercent();
-        diagram.setBlowerSpeed(blower);
-        if (smokerHardware.isBlowerForceOn()) {
-            diagram.setBlowerLabel("Blower FULL");
-        } else if (smokerHardware.isBlowerSoftPwmEnabled()) {
-            diagram.setBlowerLabel("Blower PWM %d %%".formatted(smokerHardware.getBlowerDutyPercent()));
-        } else {
-            diagram.setBlowerLabel("Blower OFF");
-        }
-
-        var fire = smokerHardware.getLatestReading(SmokerHardware.PROBE);
-        if (fire != null) {
-            diagram.setFireTemp("%.0f °C".formatted(fire.temperature()));
-        }
-        var chamber = smokerHardware.getLatestReading(SmokerHardware.IBBQ_1);
-        if (chamber != null) {
-            diagram.setFoodChamberTemp("%.0f °C".formatted(chamber.temperature()));
-        }
-        var food = smokerHardware.getLatestReading(SmokerHardware.IBBQ_2);
-        if (food != null) {
-            diagram.setFoodProbeTemp("%.0f °C".formatted(food.temperature()));
-        }
-    }
-
     @Override
-    protected void onAttach(AttachEvent attachEvent) {
-        uiRefresher.register(attachEvent.getUI(), () -> {
-            updateDiagram();
-            systemMonitor.update();
-        });
-    }
-
-    @Override
-    protected void onDetach(DetachEvent detachEvent) {
-        uiRefresher.unregister(detachEvent.getUI());
+    protected void onRefresh() {
+        updateDiagram();
+        systemMonitor.update();
     }
 
     static class SystemMonitor extends Div {
@@ -165,14 +121,4 @@ public class MainView extends VerticalLayout {
         }
     }
 
-    private static class DiagramViewInfo extends Div {
-        public DiagramViewInfo(Component... content) {
-            getStyle().setPosition(Style.Position.ABSOLUTE);
-            getStyle().set("font-style", "italic");
-            setMaxWidth("250px");
-            for (var c : content) {
-                add(c);
-            }
-        }
-    }
 }

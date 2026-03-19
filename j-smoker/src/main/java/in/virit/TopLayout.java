@@ -32,5 +32,6 @@ public class TopLayout extends MainLayout {
         // slider thumbs are too small for touch devices, let's just re-size them all
         getStyle().set("--vaadin-slider-thumb-height", "2em");
         getStyle().set("--vaadin-slider-thumb-width", "2em");
+        attachEvent.getUI().addClassName("aura-accent-purple");
     }
 }

@@ -2,14 +2,19 @@ package in.virit;
 
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.DetachEvent;
+import com.vaadin.flow.component.avatar.Avatar;
+import com.vaadin.flow.component.avatar.AvatarVariant;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
-import com.vaadin.flow.component.formlayout.FormLayout;
+import com.vaadin.flow.component.card.Card;
+import com.vaadin.flow.component.card.CardVariant;
+import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.Image;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
-import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.dom.Style;
 import com.vaadin.flow.router.Route;
 import in.virit.SmokerHardware.TemperatureReading;
 import org.vaadin.firitin.appframework.MenuItem;
@@ -39,14 +44,16 @@ public class ThermometersView extends VVerticalLayout {
     private final WarningMessage ibbqWarning = new WarningMessage("");
     private final Button ibbqReconnectButton = new Button("Reconnect iBBQ", VaadinIcon.REFRESH.create());
     private final WarningMessage meaterWarning = new WarningMessage("");
-    private final FormLayout displays = new FormLayout();
+    private final HorizontalFloatLayout foodDisplays = new HorizontalFloatLayout();
+    private final HorizontalFloatLayout ambientDisplays = new HorizontalFloatLayout();
+    private final HorizontalFloatLayout otherDisplays = new HorizontalFloatLayout();
     private final Map<String, ProbeDisplay> meaterDisplays = new LinkedHashMap<>();
 
     public ThermometersView(SmokerHardware smokerHardware, UiRefresher uiRefresher) {
         this.smokerHardware = smokerHardware;
         this.uiRefresher = uiRefresher;
 
-        probeDisplay = new ProbeDisplay("Fire chamber probe", -10, 600);
+        probeDisplay = new ProbeDisplay("Fire box probe", -10, 600);
         chipDisplay = new ProbeDisplay("Chip", -10, 80);
         ibbq1Display = new ProbeDisplay("iBBQ 1 (food chamber)", -10, 250);
         ibbq2Display = new ProbeDisplay("iBBQ 2 (food 1)", 0, 120);
@@ -63,8 +70,14 @@ public class ThermometersView extends VVerticalLayout {
             setAlignItems(Alignment.CENTER);
         }};
         add(ibbqBar, meaterWarning);
-        displays.add(ibbq1Display, ibbq2Display, ibbq3Display, probeDisplay, chipDisplay);
-        add(displays);
+
+        foodDisplays.add(ibbq2Display, ibbq3Display);
+        ambientDisplays.add(ibbq1Display);
+        otherDisplays.add(probeDisplay, chipDisplay);
+
+        add(new H2("Food"), foodDisplays,
+                new H2("Food Chamber Ambient"), ambientDisplays,
+                new H2("Other"), otherDisplays);
 
         updateReadings();
     }
@@ -94,7 +107,11 @@ public class ThermometersView extends VVerticalLayout {
                 boolean isAmbient = key.contains("(ambient)");
                 display = new ProbeDisplay(key, isAmbient ? 0 : 0, isAmbient ? 400 : 120);
                 meaterDisplays.put(key, display);
-                displays.add(display);
+                if (isAmbient) {
+                    ambientDisplays.add(display);
+                } else {
+                    foodDisplays.add(display);
+                }
             }
             display.update(smokerHardware.getHistory(key));
         }
@@ -128,7 +145,7 @@ public class ThermometersView extends VVerticalLayout {
         uiRefresher.unregister(detachEvent.getUI());
     }
 
-    static class ProbeDisplay extends VerticalLayout {
+    static class ProbeDisplay extends Card {
 
         private final Gauge gauge;
         private final RelativeTime timeLabel = new RelativeTime();
@@ -140,13 +157,34 @@ public class ThermometersView extends VVerticalLayout {
         }};
 
         ProbeDisplay(String name, double min, double max) {
+            Avatar avatar = new Avatar(name);
+            if(name.toLowerCase().contains("meater")) {
+                avatar.setImage("/meater-probe.svg");
+            } else if(name.toLowerCase().contains("food-chamber")) {
+                avatar.setImage("/ibbq-door-probe.svg");
+            } else if(name.toLowerCase().contains("chip")) {
+                avatar.setImage("/thermocouple-chip.svg");
+            } else {
+                avatar.setImage("/ibbq-probe.svg");
+            }
+            avatar.setThemeVariants(AvatarVariant.XLARGE);
+            setHeaderPrefix(avatar);
+
+            setTitle(name);
+            setHeaderSuffix(timeLabel);
+
             gauge = new Gauge() {{
                 setMinValue(min);
                 setMaxValue(max);
+                setVisible(false);
+                getElement().getStyle().setHeight("180px");
+                getElement().getStyle().setDisplay(Style.Display.BLOCK);
+                getElement().getStyle().setBorderRadius(VaadinCssProps.RADIUS_M.var());
             }};
-            gauge.setVisible(false);
+            setMedia(gauge);
+            addThemeVariants(CardVariant.COVER_MEDIA);
             sparkLine.setVisible(false);
-            add(new HorizontalFloatLayout(new Span(name), timeLabel), notConnected, gauge, sparkLine);
+            add(new VVerticalLayout(notConnected, sparkLine).withPadding(false));
         }
 
         void update(List<TemperatureReading> history) {

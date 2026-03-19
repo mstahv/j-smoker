@@ -3,6 +3,9 @@ package in.virit;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.Unit;
+import com.vaadin.flow.component.badge.Badge;
+import com.vaadin.flow.component.card.Card;
+import com.vaadin.flow.component.card.CardVariant;
 import com.vaadin.flow.component.charts.Chart;
 import com.vaadin.flow.component.charts.model.AxisType;
 import com.vaadin.flow.component.charts.model.ChartType;
@@ -14,20 +17,19 @@ import com.vaadin.flow.component.charts.model.PlotLine;
 import com.vaadin.flow.component.charts.model.PlotOptionsLine;
 import com.vaadin.flow.component.charts.model.style.SolidColor;
 import com.vaadin.flow.component.charts.model.YAxis;
-import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.H4;
+import com.vaadin.flow.component.html.Image;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import in.virit.color.Color;
+import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import in.virit.color.NamedColor;
 import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.router.Route;
 import org.vaadin.firitin.appframework.MenuItem;
+import org.vaadin.firitin.components.html.VImage;
 import org.vaadin.firitin.components.html.VSpan;
 import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
 import org.vaadin.firitin.layouts.HorizontalFloatLayout;
 import org.vaadin.firitin.util.style.AuraProps;
-import org.vaadin.firitin.util.style.VaadinCssProps;
 
 import com.vaadin.flow.component.charts.model.Time;
 
@@ -143,35 +145,37 @@ public class FoodDashboardView extends VVerticalLayout {
         uiRefresher.unregister(detachEvent.getUI());
     }
 
-    static class ProbeCard extends Div {
+    static class ProbeCard extends Card {
+
+        class TemperatureBadge extends Badge {
+            public TemperatureBadge() {
+                // TODO complain about the new "number API"...
+                //super("°C", null);
+                //setNumber(0.0);
+                getStyle().setFontSize("1.5em");
+            }
+        }
 
         private final String probeKey;
-        private final Span temperatureLabel = new Span();
+        private final TemperatureBadge temperatureBadge = new TemperatureBadge();
         private final NumberField targetField;
         private final VSpan progressLabel = new VSpan();
         private final Span etaLabel = new Span();
 
         ProbeCard(String probeKey) {
             this.probeKey = probeKey;
+            addThemeVariants(CardVariant.COVER_MEDIA);
+            VImage thermoImage;
+            if(probeKey.toLowerCase().contains("ibbq")) {
+                thermoImage = new VImage("/ibbq-probe.svg","ibbq thermometer");
+            } else {
+                thermoImage = new VImage("/meater-probe.svg","Meater");
+            }
+            thermoImage.getStyle().setBackgroundColor(NamedColor.LIGHTGRAY);
+            setMedia(thermoImage);
+            setTitle(probeKey);
 
-            getStyle()
-                    .setDisplay(com.vaadin.flow.dom.Style.Display.FLEX)
-                    .set("flex-direction", "column")
-                    .set("gap", VaadinCssProps.GAP_XS.var())
-                    .setPadding(VaadinCssProps.PADDING_M.var())
-                    .setBackground(AuraProps.SURFACE_COLOR.var())
-                    .setBorderRadius(VaadinCssProps.RADIUS_M.var())
-                    .set("min-width", "200px")
-                    .set("flex", "1");
-
-            var title = new H4(probeKey) {{
-                getStyle().setMargin("0");
-            }};
-
-            temperatureLabel.getStyle()
-                    .setFontSize("2em")
-                    .setFontWeight("bold");
-
+            setHeaderSuffix(temperatureBadge);
             targetField = new NumberField("Target \u00B0C") {{
                 setMin(0);
                 setMax(120);
@@ -185,7 +189,8 @@ public class FoodDashboardView extends VVerticalLayout {
             progressLabel.getStyle().setFontSize(AuraProps.FONT_SIZE_S.var());
             etaLabel.getStyle().setFontSize(AuraProps.FONT_SIZE_S.var());
 
-            add(title, temperatureLabel, targetField, progressLabel, etaLabel);
+
+            add(new VVerticalLayout(targetField, progressLabel, etaLabel).withPadding(false));
         }
 
         Double getTarget() {
@@ -195,14 +200,14 @@ public class FoodDashboardView extends VVerticalLayout {
         void update(SmokerHardware hardware) {
             var reading = hardware.getLatestReading(probeKey);
             if (reading == null) {
-                temperatureLabel.setText("No data");
+                temperatureBadge.setText("No data");
                 progressLabel.setText("");
                 etaLabel.setText("");
                 return;
             }
 
             double current = reading.temperature();
-            temperatureLabel.setText("%.1f\u00B0C".formatted(current));
+            temperatureBadge.setText("%.1f°".formatted(current));
 
             Double target = targetField.getValue();
             if (target == null || target <= 0) {
@@ -220,7 +225,7 @@ public class FoodDashboardView extends VVerticalLayout {
 
             double progress = (current / target) * 100;
             progressLabel.setText("%.0f%% of target".formatted(progress));
-            progressLabel.getStyle().setColor((Color) null);
+            progressLabel.getStyle().setColor((String) null);
 
             double rate = hardware.getTemperatureRate(probeKey, 3600);
             if (rate <= 0) {

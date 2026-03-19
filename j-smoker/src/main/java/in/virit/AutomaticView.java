@@ -1,7 +1,5 @@
 package in.virit;
 
-import com.vaadin.flow.component.AttachEvent;
-import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.Div;
@@ -16,19 +14,15 @@ import com.vaadin.flow.router.Route;
 import in.virit.color.Color;
 import in.virit.color.NamedColor;
 import org.vaadin.firitin.appframework.MenuItem;
-import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
 import org.vaadin.firitin.layouts.HorizontalFloatLayout;
 import org.vaadin.firitin.util.style.VaadinCssProps;
 
 @Route
 @MenuItem(icon = VaadinIcon.MAGIC)
-public class AutomaticView extends VVerticalLayout {
+public class AutomaticView extends AbstractDiagramView {
 
     private final SmokerController controller;
-    private final SmokerHardware smokerHardware;
-    private final UiRefresher uiRefresher;
 
-    private final AirflowDiagram diagram = new AirflowDiagram();
     private final NumberField setpointField = new NumberField("Target temperature (°C)");
     private final Button startStopButton = new Button();
     private final Select<SmokerController.State> stateSelect = new Select<>();
@@ -38,9 +32,11 @@ public class AutomaticView extends VVerticalLayout {
     private final PidDiagnostics pidDiagnostics = new PidDiagnostics();
 
     public AutomaticView(SmokerController controller, SmokerHardware smokerHardware, UiRefresher uiRefresher) {
+        super(smokerHardware, uiRefresher);
         this.controller = controller;
-        this.smokerHardware = smokerHardware;
-        this.uiRefresher = uiRefresher;
+
+        add(new DiagramViewInfo("Set or configure automation, the does best effort to maintain target temperature" +
+                "by controlling the airflow."));
 
         setpointField.setMin(60);
         setpointField.setMax(180);
@@ -86,7 +82,7 @@ public class AutomaticView extends VVerticalLayout {
 
         var controls = new HorizontalFloatLayout(setpointField, startStopButton, stateSelect, chamberSourceSelect);
 
-        add(diagram, controls, stateIndicator, actuatorStatus, pidDiagnostics, new ParameterPanel(controller));
+        add(controls, stateIndicator, actuatorStatus, pidDiagnostics, new ParameterPanel(controller));
         updateView();
     }
 
@@ -101,30 +97,6 @@ public class AutomaticView extends VVerticalLayout {
             startStopButton.removeThemeVariants(ButtonVariant.LUMO_ERROR);
         }
         setpointField.setEnabled(!running);
-    }
-
-    private void updateDiagram() {
-        diagram.setThrottlePercent(smokerHardware.getThrottlePercent());
-        diagram.setBlowerSpeed(smokerHardware.getBlowerPercent());
-        if (smokerHardware.isBlowerForceOn()) {
-            diagram.setBlowerLabel("Blower FULL");
-        } else if (smokerHardware.isBlowerSoftPwmEnabled()) {
-            diagram.setBlowerLabel("Blower PWM %d %%".formatted(smokerHardware.getBlowerDutyPercent()));
-        } else {
-            diagram.setBlowerLabel("Blower OFF");
-        }
-        var fire = smokerHardware.getLatestReading(SmokerHardware.PROBE);
-        if (fire != null) {
-            diagram.setFireTemp("%.0f °C".formatted(fire.temperature()));
-        }
-        var chamber = smokerHardware.getLatestReading(SmokerHardware.IBBQ_1);
-        if (chamber != null) {
-            diagram.setFoodChamberTemp("%.0f °C".formatted(chamber.temperature()));
-        }
-        var food = smokerHardware.getLatestReading(SmokerHardware.IBBQ_2);
-        if (food != null) {
-            diagram.setFoodProbeTemp("%.0f °C".formatted(food.temperature()));
-        }
     }
 
     private void updateView() {
@@ -161,13 +133,8 @@ public class AutomaticView extends VVerticalLayout {
     }
 
     @Override
-    protected void onAttach(AttachEvent attachEvent) {
-        uiRefresher.register(attachEvent.getUI(), this::updateView);
-    }
-
-    @Override
-    protected void onDetach(DetachEvent detachEvent) {
-        uiRefresher.unregister(detachEvent.getUI());
+    protected void onRefresh() {
+        updateView();
     }
 
     static String stateLabel(SmokerController.State state) {

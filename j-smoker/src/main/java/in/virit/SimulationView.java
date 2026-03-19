@@ -1,7 +1,5 @@
 package in.virit;
 
-import com.vaadin.flow.component.AttachEvent;
-import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.H4;
@@ -16,22 +14,17 @@ import com.vaadin.flow.router.Route;
 import in.virit.color.NamedColor;
 import org.vaadin.firitin.appframework.MenuItem;
 import org.vaadin.firitin.components.button.VButton;
-import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
 import org.vaadin.firitin.layouts.HorizontalFloatLayout;
 
 /**
- * Simulation view for testing the automation without real hardware.
+ * Simulation view for testing the automation without real smokerHardware.
  * Provides manual temperature injection and shows PID/state machine response in real time.
  */
 @Route
-@MenuItem(icon = VaadinIcon.FLASK)
-public class SimulationView extends VVerticalLayout {
+@MenuItem(icon = VaadinIcon.FLASK, order = MenuItem.END)
+public class SimulationView extends AbstractDiagramView {
 
-    private final SmokerHardware hardware;
     private final SmokerController controller;
-    private final UiRefresher uiRefresher;
-
-    private final AirflowDiagram diagram = new AirflowDiagram();
 
     // Temperature injection controls
     private final NumberField chamberTempField = new NumberField("Chamber temperature (°C)");
@@ -61,14 +54,15 @@ public class SimulationView extends VVerticalLayout {
     private final NumberField simSpeedField = new NumberField("Time acceleration");
 
     public SimulationView(SmokerHardware hardware, SmokerController controller, UiRefresher uiRefresher) {
-        this.hardware = hardware;
+        super(hardware, uiRefresher);
         this.controller = controller;
-        this.uiRefresher = uiRefresher;
+
+        add(new DiagramViewInfo("Use this view to test/play with the automation logic."));
 
         // Simulation toggle
         updateSimToggle();
         simToggle.addClickListener(e -> {
-            hardware.setSimulationMode(!hardware.isSimulationMode());
+            smokerHardware.setSimulationMode(!smokerHardware.isSimulationMode());
             updateSimToggle();
         });
 
@@ -112,8 +106,8 @@ public class SimulationView extends VVerticalLayout {
         updateStartStopButton();
         startStopButton.addClickListener(e -> {
             if (controller.getState() == SmokerController.State.OFF) {
-                if (!hardware.isSimulationMode()) {
-                    hardware.setSimulationMode(true);
+                if (!smokerHardware.isSimulationMode()) {
+                    smokerHardware.setSimulationMode(true);
                     updateSimToggle();
                 }
                 // Inject initial temperatures before starting
@@ -131,8 +125,8 @@ public class SimulationView extends VVerticalLayout {
         stateSelect.setValue(controller.getState());
         stateSelect.addValueChangeListener(e -> {
             if (e.isFromClient()) {
-                if (!hardware.isSimulationMode()) {
-                    hardware.setSimulationMode(true);
+                if (!smokerHardware.isSimulationMode()) {
+                    smokerHardware.setSimulationMode(true);
                     updateSimToggle();
                 }
                 injectTemperatures();
@@ -163,7 +157,6 @@ public class SimulationView extends VVerticalLayout {
         }};
 
         add(
-                diagram,
                 simToggle, simSpeedField,
                 new H4("Temperature input"),
                 new HorizontalFloatLayout(chamberTempField, fireTempField),
@@ -191,7 +184,7 @@ public class SimulationView extends VVerticalLayout {
     }
 
     private void updateSimToggle() {
-        boolean active = hardware.isSimulationMode();
+        boolean active = smokerHardware.isSimulationMode();
         simToggle.setText(active ? "Simulation ON — click to disable" : "Simulation OFF — click to enable");
         if (active) {
             simToggle.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -204,10 +197,10 @@ public class SimulationView extends VVerticalLayout {
 
     private void injectTemperatures() {
         if (chamberTempField.getValue() != null) {
-            hardware.simulateReading(SmokerHardware.IBBQ_1, chamberTempField.getValue());
+            smokerHardware.simulateReading(SmokerHardware.IBBQ_1, chamberTempField.getValue());
         }
         if (fireTempField.getValue() != null) {
-            hardware.simulateReading(SmokerHardware.PROBE, fireTempField.getValue());
+            smokerHardware.simulateReading(SmokerHardware.PROBE, fireTempField.getValue());
         }
     }
 
@@ -215,7 +208,7 @@ public class SimulationView extends VVerticalLayout {
         // Rapidly increase fire temperature to trigger flame detection
         double current = fireTempField.getValue() != null ? fireTempField.getValue() : 200;
         for (int i = 1; i <= 8; i++) {
-            hardware.simulateReading(SmokerHardware.PROBE, current + i * 5);
+            smokerHardware.simulateReading(SmokerHardware.PROBE, current + i * 5);
         }
         fireTempField.setValue(current + 40);
         Notification.show("Flame simulated — fire box temperature raised rapidly", 3000, Notification.Position.BOTTOM_START);
@@ -225,7 +218,7 @@ public class SimulationView extends VVerticalLayout {
         // Rapidly drop fire temperature
         double current = fireTempField.getValue() != null ? fireTempField.getValue() : 200;
         for (int i = 1; i <= 8; i++) {
-            hardware.simulateReading(SmokerHardware.PROBE, current - i * 5);
+            smokerHardware.simulateReading(SmokerHardware.PROBE, current - i * 5);
         }
         fireTempField.setValue(current - 40);
         Notification.show("Wood addition simulated — fire box temperature dropped", 3000, Notification.Position.BOTTOM_START);
@@ -252,30 +245,6 @@ public class SimulationView extends VVerticalLayout {
             startStopButton.removeThemeVariants(ButtonVariant.LUMO_ERROR);
         }
         setpointField.setEnabled(!running);
-    }
-
-    private void updateDiagram() {
-        diagram.setThrottlePercent(hardware.getThrottlePercent());
-        diagram.setBlowerSpeed(hardware.getBlowerPercent());
-        if (hardware.isBlowerForceOn()) {
-            diagram.setBlowerLabel("Blower FULL");
-        } else if (hardware.isBlowerSoftPwmEnabled()) {
-            diagram.setBlowerLabel("Blower PWM %d %%".formatted(hardware.getBlowerDutyPercent()));
-        } else {
-            diagram.setBlowerLabel("Blower OFF");
-        }
-        var fire = hardware.getLatestReading(SmokerHardware.PROBE);
-        if (fire != null) {
-            diagram.setFireTemp("%.0f °C".formatted(fire.temperature()));
-        }
-        var chamber = hardware.getLatestReading(SmokerHardware.IBBQ_1);
-        if (chamber != null) {
-            diagram.setFoodChamberTemp("%.0f °C".formatted(chamber.temperature()));
-        }
-        var food = hardware.getLatestReading(SmokerHardware.IBBQ_2);
-        if (food != null) {
-            diagram.setFoodProbeTemp("%.0f °C".formatted(food.temperature()));
-        }
     }
 
     private void updateStatus() {
@@ -305,18 +274,13 @@ public class SimulationView extends VVerticalLayout {
         }
 
         // Keep injecting current temperatures in simulation mode
-        if (hardware.isSimulationMode() && controller.getState() != SmokerController.State.OFF) {
+        if (smokerHardware.isSimulationMode() && controller.getState() != SmokerController.State.OFF) {
             injectTemperatures();
         }
     }
 
     @Override
-    protected void onAttach(AttachEvent attachEvent) {
-        uiRefresher.register(attachEvent.getUI(), this::updateStatus);
-    }
-
-    @Override
-    protected void onDetach(DetachEvent detachEvent) {
-        uiRefresher.unregister(detachEvent.getUI());
+    protected void onRefresh() {
+        updateStatus();
     }
 }

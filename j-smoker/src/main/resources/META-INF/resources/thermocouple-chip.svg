@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-90 20 260 170">
+  <defs>
+    <linearGradient id="cPcb" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1a6b30"/>
+      <stop offset="20%" stop-color="#1e8038"/>
+      <stop offset="50%" stop-color="#22913e"/>
+      <stop offset="80%" stop-color="#1e8038"/>
+      <stop offset="100%" stop-color="#1a6b30"/>
+    </linearGradient>
+    <linearGradient id="cIc" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1a1a1a"/>
+      <stop offset="30%" stop-color="#2a2a2a"/>
+      <stop offset="70%" stop-color="#2a2a2a"/>
+      <stop offset="100%" stop-color="#1a1a1a"/>
+    </linearGradient>
+    <linearGradient id="cTerm" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2266cc"/>
+      <stop offset="30%" stop-color="#3388ee"/>
+      <stop offset="70%" stop-color="#3388ee"/>
+      <stop offset="100%" stop-color="#2266cc"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="rotate(80, 40, 100)">
+    <!-- === PCB BOARD === -->
+    <rect x="20" y="50" width="40" height="70" rx="2" fill="url(#cPcb)" stroke="#14552a" stroke-width="1.2"/>
+
+    <!-- PCB corner holes -->
+    <circle cx="26" cy="56" r="2" fill="#14552a" stroke="#0d3d1e" stroke-width="0.5"/>
+    <circle cx="54" cy="56" r="2" fill="#14552a" stroke="#0d3d1e" stroke-width="0.5"/>
+    <circle cx="26" cy="114" r="2" fill="#14552a" stroke="#0d3d1e" stroke-width="0.5"/>
+    <circle cx="54" cy="114" r="2" fill="#14552a" stroke="#0d3d1e" stroke-width="0.5"/>
+
+    <!-- Copper traces -->
+    <g stroke="#b8860b" stroke-width="0.8" opacity="0.4" fill="none">
+      <line x1="30" y1="68" x2="30" y2="78"/>
+      <line x1="50" y1="68" x2="50" y2="78"/>
+      <line x1="30" y1="96" x2="30" y2="108"/>
+      <line x1="35" y1="96" x2="35" y2="108"/>
+      <line x1="40" y1="96" x2="40" y2="108"/>
+      <line x1="45" y1="96" x2="45" y2="108"/>
+      <line x1="50" y1="96" x2="50" y2="108"/>
+    </g>
+
+    <!-- === SCREW TERMINAL BLOCK (top, for thermocouple wires) === -->
+    <rect x="24" y="60" width="32" height="12" rx="1" fill="url(#cTerm)" stroke="#1a55aa" stroke-width="0.8"/>
+    <!-- Screw holes -->
+    <circle cx="32" cy="66" r="3" fill="#1a55aa" stroke="#134488" stroke-width="0.5"/>
+    <circle cx="48" cy="66" r="3" fill="#1a55aa" stroke="#134488" stroke-width="0.5"/>
+    <!-- Screw slots -->
+    <line x1="30" y1="66" x2="34" y2="66" stroke="#0e3366" stroke-width="1"/>
+    <line x1="46" y1="66" x2="50" y2="66" stroke="#0e3366" stroke-width="1"/>
+    <!-- Terminal divider -->
+    <line x1="40" y1="61" x2="40" y2="71" stroke="#134488" stroke-width="0.8"/>
+
+    <!-- === IC CHIP === -->
+    <rect x="28" y="78" width="24" height="18" rx="1" fill="url(#cIc)" stroke="#111" stroke-width="0.8"/>
+    <!-- IC dot marker -->
+    <circle cx="32" cy="82" r="1.2" fill="#444"/>
+    <!-- IC text -->
+    <text x="40" y="91" text-anchor="middle" font-family="monospace" font-size="4" fill="#888">MCP</text>
+
+    <!-- IC pins (left side) -->
+    <g fill="#c0c0c0" stroke="#999" stroke-width="0.3">
+      <rect x="25" y="80" width="4" height="1.5" rx="0.3"/>
+      <rect x="25" y="84" width="4" height="1.5" rx="0.3"/>
+      <rect x="25" y="88" width="4" height="1.5" rx="0.3"/>
+      <rect x="25" y="92" width="4" height="1.5" rx="0.3"/>
+    </g>
+    <!-- IC pins (right side) -->
+    <g fill="#c0c0c0" stroke="#999" stroke-width="0.3">
+      <rect x="51" y="80" width="4" height="1.5" rx="0.3"/>
+      <rect x="51" y="84" width="4" height="1.5" rx="0.3"/>
+      <rect x="51" y="88" width="4" height="1.5" rx="0.3"/>
+      <rect x="51" y="92" width="4" height="1.5" rx="0.3"/>
+    </g>
+
+    <!-- === HEADER PINS (bottom) === -->
+    <g fill="#c0c0c0" stroke="#999" stroke-width="0.4">
+      <rect x="29" y="110" width="2" height="10" rx="0.3"/>
+      <rect x="34" y="110" width="2" height="10" rx="0.3"/>
+      <rect x="39" y="110" width="2" height="10" rx="0.3"/>
+      <rect x="44" y="110" width="2" height="10" rx="0.3"/>
+      <rect x="49" y="110" width="2" height="10" rx="0.3"/>
+    </g>
+    <!-- Pin plastic housing -->
+    <rect x="27" y="108" width="26" height="5" rx="1" fill="#222" stroke="#111" stroke-width="0.6"/>
+
+    <!-- Small passive components on PCB -->
+    <rect x="26" y="100" width="4" height="2" rx="0.5" fill="#8B7355" stroke="#6B5335" stroke-width="0.3"/>
+    <rect x="50" y="100" width="4" height="2" rx="0.5" fill="#8B7355" stroke="#6B5335" stroke-width="0.3"/>
+  </g>
+</svg>

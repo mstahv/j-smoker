@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-90 20 260 170">
+  <defs>
+    <linearGradient id="dShaft" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#b0b0b0"/>
+      <stop offset="30%" stop-color="#e0e0e0"/>
+      <stop offset="50%" stop-color="#f5f5f5"/>
+      <stop offset="70%" stop-color="#e0e0e0"/>
+      <stop offset="100%" stop-color="#a0a0a0"/>
+    </linearGradient>
+    <linearGradient id="dBody" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1a1a1a"/>
+      <stop offset="20%" stop-color="#2d2d2d"/>
+      <stop offset="50%" stop-color="#363636"/>
+      <stop offset="80%" stop-color="#2d2d2d"/>
+      <stop offset="100%" stop-color="#1a1a1a"/>
+    </linearGradient>
+    <linearGradient id="dTip" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c0c0c0"/>
+      <stop offset="100%" stop-color="#808080"/>
+    </linearGradient>
+    <radialGradient id="dScreen" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ff9800"/>
+      <stop offset="80%" stop-color="#e65100"/>
+      <stop offset="100%" stop-color="#bf360c"/>
+    </radialGradient>
+  </defs>
+
+  <g transform="rotate(80, 40, 100)">
+    <!-- === DISK UNIT (outside the door) === -->
+    <!-- Outer metal ring -->
+    <circle cx="40" cy="64" r="26" fill="#666" stroke="#444" stroke-width="1.2"/>
+    <!-- Main disk body -->
+    <circle cx="40" cy="64" r="23" fill="url(#dBody)" stroke="#111" stroke-width="1"/>
+    <!-- Orange accent ring -->
+    <circle cx="40" cy="64" r="20" fill="none" stroke="#e67e22" stroke-width="1" opacity="0.7"/>
+
+    <!-- Display screen -->
+    <circle cx="40" cy="64" r="14" fill="url(#dScreen)" opacity="0.85"/>
+    <!-- Temperature reading -->
+    <text x="40" y="69" text-anchor="middle" font-family="monospace" font-size="12" font-weight="bold" fill="#fff">145°</text>
+
+    <!-- Narrow neck / bolt through the door gap -->
+    <rect x="35" y="90" width="10" height="10" rx="2" fill="#555" stroke="#333" stroke-width="0.8"/>
+
+    <!-- Metal ferrule (transition to probe) -->
+    <rect x="36" y="100" width="8" height="6" rx="1.5" fill="#999" stroke="#777" stroke-width="0.8"/>
+
+    <!-- === PROBE SHAFT (short, inside the smoker) === -->
+    <rect x="37" y="106" width="6" height="45" rx="1" fill="url(#dShaft)" stroke="#909090" stroke-width="0.5"/>
+
+    <!-- Probe tip -->
+    <path d="M37 151 L40 162 L43 151" fill="url(#dTip)" stroke="#707070" stroke-width="0.5"/>
+
+    <!-- Shaft highlight -->
+    <rect x="39" y="109" width="1.5" height="38" rx="0.5" fill="white" opacity="0.15"/>
+  </g>
+</svg>

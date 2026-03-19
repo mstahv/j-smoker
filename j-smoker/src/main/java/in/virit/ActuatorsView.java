@@ -1,37 +1,33 @@
 package in.virit;
 
-import com.vaadin.flow.component.AttachEvent;
-import com.vaadin.flow.component.DetachEvent;
-import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.html.Emphasis;
+import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
 import com.vaadin.flow.router.Route;
 import in.virit.slider.NumberSlider;
 import org.vaadin.firitin.appframework.MenuItem;
+import org.vaadin.firitin.components.RichText;
 import org.vaadin.firitin.util.style.VaadinCssProps;
 
 @Route
 @MenuItem(icon = VaadinIcon.ADJUST)
-public class ActuatorsView extends VerticalLayout {
+public class ActuatorsView extends AbstractDiagramView {
 
     private static final String BLOWER_OFF = "Off";
     private static final String BLOWER_ON = "Full on";
     private static final String BLOWER_PWM = "Software PWM";
 
-    private final SmokerHardware smokerHardware;
-    private final UiRefresher uiRefresher;
-
     private final WarningMessage autoWarning = new WarningMessage(
             "Automatic control active — manual controls disabled");
-    private final AirflowDiagram diagram = new AirflowDiagram();
     private final NumberSlider<Integer> throttle;
     private final RadioButtonGroup<String> blowerMode;
     private final NumberSlider<Integer> blowerDuty;
 
     public ActuatorsView(SmokerHardware smokerHardware, UiRefresher uiRefresher) {
-        this.smokerHardware = smokerHardware;
-        this.uiRefresher = uiRefresher;
+        super(smokerHardware, uiRefresher);
+
+        add(new DiagramViewInfo("Modify the state of actuators, either via diagram or through form controls."));
 
         autoWarning.setVisible(false);
 
@@ -115,7 +111,7 @@ public class ActuatorsView extends VerticalLayout {
             }
         });
 
-        add(autoWarning, diagram, throttle, blowerMode, blowerDuty);
+        add(autoWarning, throttle, blowerMode, blowerDuty);
         setSpacing(VaadinCssProps.GAP_XL.var());
 
         // Initialize components with current hardware state
@@ -133,10 +129,11 @@ public class ActuatorsView extends VerticalLayout {
         }
         // blowerMode value change listener already syncs the diagram
 
-        updateAutoState();
+        onRefresh();
     }
 
-    private void updateAutoState() {
+    @Override
+    protected void onRefresh() {
         boolean autoActive = smokerHardware.isAutomaticControlActive();
         autoWarning.setVisible(autoActive);
         throttle.setEnabled(!autoActive);
@@ -150,13 +147,4 @@ public class ActuatorsView extends VerticalLayout {
         }
     }
 
-    @Override
-    protected void onAttach(AttachEvent attachEvent) {
-        uiRefresher.register(attachEvent.getUI(), this::updateAutoState);
-    }
-
-    @Override
-    protected void onDetach(DetachEvent detachEvent) {
-        uiRefresher.unregister(detachEvent.getUI());
-    }
 }
