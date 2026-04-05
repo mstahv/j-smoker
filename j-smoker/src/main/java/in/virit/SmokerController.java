@@ -1,7 +1,9 @@
 package in.virit;
 
 import io.quarkus.scheduler.Scheduled;
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 
 import java.io.IOException;
@@ -12,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 @ApplicationScoped
@@ -98,6 +101,7 @@ public class SmokerController {
     // Durations for sustained condition detection (in ticks, each 5s)
     private static final int LOW_FUEL_TICKS = 24;  // 2 minutes
     private static final int WATER_PAN_TICKS = 24;  // 2 minutes
+    private static final int FLAME_ALERT_TICKS = 12; // 60 seconds sustained high fire rate
 
     // Simulation time acceleration (1 = real-time)
     private int simulationSpeed = 5;
@@ -105,16 +109,27 @@ public class SmokerController {
     @Inject
     SmokerHardware hardware;
 
-    private final PidController pid = new PidController(3.0, 0.02, 1.5);
+    @Inject
+    Event<AppEvent.SetpointChanged> setpointChangedEvent;
+
+    @Inject
+    Event<AppEvent.AutoControlStateChanged> autoControlStateChangedEvent;
+
+    private final PidController pid = new PidController(3.0, 0.03, 1.5);
 
     private volatile State state = State.OFF;
     private double setpoint = 120.0;
     private Instant startTime;
     private Instant lastTickTime;
 
+    // Grace period: after restore, hold actuators steady to observe trends
+    private static final long GRACE_PERIOD_SECONDS = 120;
+    private Instant graceUntil;
+
     // Sustained condition counters
     private int lowFuelCounter;
     private int waterPanCounter;
+    private int flameAlertCounter;
 
     // Heating mode: wait before engaging blower
     private static final int HEATING_BLOWER_WAIT_TICKS = 6; // 30s at 5s ticks
@@ -153,6 +168,111 @@ public class SmokerController {
     private volatile boolean woodAdditionDetected;
     private volatile String activeChamberSourceKey = SmokerHardware.IBBQ_1;
 
+    @PostConstruct
+    void init() {
+        restoreFromLog();
+    }
+
+    /**
+     * Restore automatic control state from smoker.log after restart.
+     * If the last STARTED was not followed by a STOPPED, resume with the same setpoint.
+     * The last tick line determines whether to resume in HEATING or SMOKING.
+     */
+    private void restoreFromLog() {
+        if (!Files.exists(SmokerHardware.LOG_FILE)) return;
+        try {
+            List<String> lines = Files.readAllLines(SmokerHardware.LOG_FILE);
+
+            // Walk backwards to find the last STARTED or STOPPED
+            double restoredSetpoint = -1;
+            State restoredState = null;
+
+            for (int i = lines.size() - 1; i >= 0; i--) {
+                String line = lines.get(i);
+                if (line.contains("[SMOKER] STOPPED")) {
+                    // Last event was a stop — don't resume
+                    LOG.info("Last control event was STOPPED, not resuming");
+                    return;
+                }
+                if (line.contains("[SMOKER] STARTED: setpoint=")) {
+                    // Extract setpoint
+                    String after = line.substring(line.indexOf("setpoint=") + 9);
+                    String spStr = after.split("°")[0];
+                    restoredSetpoint = Double.parseDouble(spStr);
+                    break;
+                }
+            }
+
+            if (restoredSetpoint < 0) return; // No STARTED found
+
+            // Find the last tick line to determine state (HEATING, SMOKING, etc.)
+            for (int i = lines.size() - 1; i >= 0; i--) {
+                String line = lines.get(i);
+                // Tick lines start with timestamp then state: "2026-04-05T10:20:35 SMOKING 78 ..."
+                for (State s : new State[]{State.SMOKING, State.HEATING, State.FLAME_ALERT, State.LOW_FUEL}) {
+                    if (line.contains(" " + s.name() + " ")) {
+                        restoredState = s;
+                        break;
+                    }
+                }
+                if (restoredState != null) break;
+            }
+
+            if (restoredState == null) restoredState = State.SMOKING;
+
+            // Read last throttle and blower from tick line:
+            // format: "timestamp STATE chamber fire sp err out T% B% ..."
+            int restoredThrottle = restoredState == State.HEATING ? 100 : 50;
+            int restoredBlower = 0;
+            for (int i = lines.size() - 1; i >= 0; i--) {
+                String line = lines.get(i);
+                if (!line.contains(" " + restoredState.name() + " ")) continue;
+                // Split: [0]=timestamp [1]=state [2]=chamber [3]=fire [4]=sp [5]=err [6]=out [7]=T% [8]=B%
+                String afterTimestamp = line.substring(line.indexOf(' ') + 1);
+                String[] parts = afterTimestamp.split("\\s+");
+                if (parts.length >= 8) {
+                    try {
+                        restoredThrottle = Integer.parseInt(parts[6]);
+                        restoredBlower = Integer.parseInt(parts[7]);
+                    } catch (NumberFormatException ignored) {}
+                }
+                break;
+            }
+
+            // Resume with restored actuator values
+            this.setpoint = restoredSetpoint;
+            this.state = restoredState;
+            this.startTime = Instant.now();
+            this.lastTickTime = null;
+            this.lowFuelCounter = 0;
+            this.waterPanCounter = 0;
+            this.flameAlertCounter = 0;
+            this.heatingNoRiseTicks = 0;
+            this.woodAdditionDetected = false;
+            pid.reset();
+            hardware.setAutomaticControlActive(true);
+        autoControlStateChangedEvent.fire(new AppEvent.AutoControlStateChanged(true));
+            hardware.setThrottle(restoredThrottle);
+            lastThrottlePercent = restoredThrottle;
+            if (restoredBlower > 0) {
+                hardware.setBlowerDuty(restoredBlower);
+            } else {
+                hardware.disableBlower();
+            }
+            lastBlowerPercent = restoredBlower;
+
+            // Grace period: hold these values, only observe
+            this.graceUntil = Instant.now().plusSeconds(GRACE_PERIOD_SECONDS);
+
+            log("[SMOKER] RESTORED after restart: setpoint=%.1f°C, state=%s, T=%d%%, B=%d%%, grace=%ds"
+                    .formatted(restoredSetpoint, restoredState, restoredThrottle, restoredBlower, GRACE_PERIOD_SECONDS));
+            pendingAlerts.add("Auto control restored: %.0f°C, %s (observing %ds)"
+                    .formatted(restoredSetpoint, restoredState, GRACE_PERIOD_SECONDS));
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "Failed to restore controller state from log", e);
+        }
+    }
+
     public void start(double setpointTemp) {
         this.setpoint = setpointTemp;
         this.state = State.HEATING;
@@ -164,6 +284,7 @@ public class SmokerController {
         this.woodAdditionDetected = false;
         pid.reset();
         hardware.setAutomaticControlActive(true);
+        autoControlStateChangedEvent.fire(new AppEvent.AutoControlStateChanged(true));
         // Immediately open throttle fully for heating
         hardware.setThrottle(100);
         fileLog("---");
@@ -178,6 +299,7 @@ public class SmokerController {
         hardware.setThrottle(0);
         hardware.disableBlower();
         hardware.setAutomaticControlActive(false);
+        autoControlStateChangedEvent.fire(new AppEvent.AutoControlStateChanged(false));
         lastPidOutput = 0;
         lastThrottlePercent = 0;
         lastBlowerPercent = 0;
@@ -214,10 +336,12 @@ public class SmokerController {
             this.lastTickTime = null;
             this.lowFuelCounter = 0;
             this.waterPanCounter = 0;
+            this.flameAlertCounter = 0;
             this.heatingNoRiseTicks = 0;
             this.woodAdditionDetected = false;
             pid.reset();
             hardware.setAutomaticControlActive(true);
+        autoControlStateChangedEvent.fire(new AppEvent.AutoControlStateChanged(true));
         }
         state = targetState;
         log("[SMOKER] STATE CHANGE: %s → %s (forced)".formatted(prev, targetState));
@@ -261,6 +385,7 @@ public class SmokerController {
                 }
             }
             case AUTO -> {
+                // iBBQ door sensor is faster-reacting — use as primary, Meater as fallback
                 chamberReading = hardware.getLatestReading(SmokerHardware.IBBQ_1);
                 activeKey = SmokerHardware.IBBQ_1;
                 if (chamberReading == null) {
@@ -286,6 +411,18 @@ public class SmokerController {
         double chamberRate = hardware.getTemperatureRate(activeKey, RATE_WINDOW_SECONDS);
         lastFireRate = fireRate;
         lastChamberRate = chamberRate;
+
+        // Grace period after restore: hold actuator values, only observe
+        if (graceUntil != null) {
+            if (Instant.now().isBefore(graceUntil)) {
+                lastError = setpoint - chamberTemp;
+                logTick(chamberTemp, fireTemp, fireRate, chamberRate);
+                return;
+            }
+            log("[SMOKER] Grace period ended, PID taking over");
+            graceUntil = null;
+            pid.reset();
+        }
 
         // State machine logic
         switch (state) {
@@ -359,18 +496,36 @@ public class SmokerController {
     private void tickSmoking(double chamberTemp, double fireTemp, double fireRate, double chamberRate, double dtSeconds) {
         // Safety checks first
 
-        // 1. Flame detection
+        // 1. Flame detection — require sustained high fire rate
         if (fireRate > flameRateThreshold) {
-            log("[SMOKER] STATE CHANGE: SMOKING → FLAME_ALERT (fire_rate=%+.1f°C/30s, threshold=%.1f)"
-                    .formatted(fireRate, flameRateThreshold));
-            state = State.FLAME_ALERT;
-            hardware.setThrottle(0);
-            hardware.disableBlower();
-            lastThrottlePercent = 0;
-            lastBlowerPercent = 0;
-            lastPidOutput = 0;
-            pendingAlerts.add("Flame detected! Throttle closed.");
-            return;
+            double error = setpoint - chamberTemp;
+            if (!Double.isNaN(fireTemp) && fireTemp < 300 && error > 10) {
+                // Early heating phase: fire is building up, not a dangerous flame.
+                flameAlertCounter = 0;
+                log("[SMOKER] FLAME_SUPPRESSED: fire=%.0f°C(<300), error=%+.1f°C(>10), fire_rate=%+.1f°C/30s — continuing PID"
+                        .formatted(fireTemp, error, fireRate));
+            } else {
+                flameAlertCounter++;
+                if (flameAlertCounter == 1) {
+                    // First tick above threshold — notify but don't trigger yet
+                    pendingAlerts.add("Fire rate high (%+.1f°C/30s) — monitoring...".formatted(fireRate));
+                }
+                if (flameAlertCounter >= FLAME_ALERT_TICKS) {
+                    log("[SMOKER] STATE CHANGE: SMOKING → FLAME_ALERT (fire_rate=%+.1f°C/30s sustained %ds)"
+                            .formatted(fireRate, flameAlertCounter * 5));
+                    state = State.FLAME_ALERT;
+                    hardware.setThrottle(0);
+                    hardware.disableBlower();
+                    lastThrottlePercent = 0;
+                    lastBlowerPercent = 0;
+                    lastPidOutput = 0;
+                    flameAlertCounter = 0;
+                    pendingAlerts.add("Flame detected! Throttle closed.");
+                    return;
+                }
+            }
+        } else {
+            flameAlertCounter = 0;
         }
 
         // 2. Wood addition detection
@@ -509,6 +664,7 @@ public class SmokerController {
 
     public void setSetpoint(double setpoint) {
         this.setpoint = setpoint;
+        setpointChangedEvent.fire(new AppEvent.SetpointChanged(setpoint));
     }
 
     public double getLastError() {

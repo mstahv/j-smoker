@@ -40,7 +40,7 @@ public class AutomaticView extends AbstractDiagramView {
 
         setpointField.setMin(60);
         setpointField.setMax(180);
-        setpointField.setStep(5);
+        setpointField.setStep(1);
         setpointField.setValue(controller.getSetpoint());
         setpointField.setSuffixComponent(new Span("°C"));
         setpointField.setStepButtonsVisible(true);
@@ -96,7 +96,6 @@ public class AutomaticView extends AbstractDiagramView {
             startStopButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
             startStopButton.removeThemeVariants(ButtonVariant.LUMO_ERROR);
         }
-        setpointField.setEnabled(!running);
     }
 
     private void updateView() {
@@ -133,8 +132,13 @@ public class AutomaticView extends AbstractDiagramView {
     }
 
     @Override
-    protected void onRefresh() {
+    protected void onRefresh(java.util.List<AppEvent> events) {
         updateView();
+        for (var event : events) {
+            if (event instanceof AppEvent.SetpointChanged sc) {
+                setpointField.setValue(sc.setpoint());
+            }
+        }
     }
 
     static String stateLabel(SmokerController.State state) {

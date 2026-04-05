@@ -23,7 +23,7 @@ public class MainView extends AbstractDiagramView {
 
         add(new DiagramViewInfo(
                 new RichText().withMarkDown("""
-                    Wellcome to J-Smoker! Powered by Pi4J, Vaadin, Quarkus.
+                    Wellcome to J-Smoker, hello Frank! Powered by Pi4J, Vaadin, Quarkus.
                     [Source code](https://github.com/mstahv/j-smoker).
                     """),
                 new Paragraph("Running on: " + smokerHardware.boardName()))
@@ -34,7 +34,7 @@ public class MainView extends AbstractDiagramView {
     }
 
     @Override
-    protected void onRefresh() {
+    protected void onRefresh(java.util.List<AppEvent> events) {
         updateDiagram();
         systemMonitor.update();
     }
@@ -48,6 +48,7 @@ public class MainView extends AbstractDiagramView {
         private final StatBadge processMemory = new StatBadge("Process RES");
         private final StatBadge osMemory = new StatBadge("OS mem", "%s / %s");
         private final StatBadge cpuUsage = new StatBadge("CPU", "%.0f%% proc / %.0f%% sys");
+        private final StatBadge wifiSignal = new StatBadge("WiFi");
         private final com.sun.management.OperatingSystemMXBean osMx =
                 (com.sun.management.OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
         private final long startTimeMillis = ManagementFactory.getRuntimeMXBean().getStartTime();
@@ -63,7 +64,7 @@ public class MainView extends AbstractDiagramView {
             });
             gcButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
 
-            add(new StatGrid(uptimeLabel, versionLabel, heapUsage, heapMax, processMemory, osMemory, cpuUsage), gcButton);
+            add(new StatGrid(uptimeLabel, versionLabel, heapUsage, heapMax, processMemory, osMemory, cpuUsage, wifiSignal), gcButton);
         }
 
         void update() {
@@ -91,6 +92,8 @@ public class MainView extends AbstractDiagramView {
             double cpuLoad = osMx.getProcessCpuLoad();
             double systemLoad = osMx.getSystemCpuLoad();
             cpuUsage.setValue(cpuLoad * 100, systemLoad * 100);
+
+            wifiSignal.setValue(readWifiSignal());
         }
 
         private String mb(long bytes) {
@@ -106,6 +109,35 @@ public class MainView extends AbstractDiagramView {
             } catch (Exception e) {
                 return "dev";
             }
+        }
+
+        /**
+         * Read WiFi signal level from /proc/net/wireless.
+         * Format: "iface: status link level noise ..."
+         * Level is typically in dBm (e.g. -45).
+         */
+        private String readWifiSignal() {
+            try {
+                for (String line : java.nio.file.Files.readAllLines(java.nio.file.Path.of("/proc/net/wireless"))) {
+                    line = line.trim();
+                    if (line.startsWith("wlan")) {
+                        // "wlan0: 0000 70. -40. -256 ..."
+                        String[] parts = line.split("\\s+");
+                        if (parts.length >= 4) {
+                            String level = parts[3].replace(".", "");
+                            int dbm = Integer.parseInt(level);
+                            String quality;
+                            if (dbm >= -50) quality = "Excellent";
+                            else if (dbm >= -60) quality = "Good";
+                            else if (dbm >= -70) quality = "Fair";
+                            else quality = "Weak";
+                            return "%d dBm (%s)".formatted(dbm, quality);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+            return "N/A";
         }
 
         private long readRssBytes() {

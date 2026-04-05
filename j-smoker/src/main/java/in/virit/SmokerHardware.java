@@ -95,6 +95,11 @@ public class SmokerHardware {
     // Simulation mode: when enabled, simulateReading() injects values instead of real sensors
     private volatile boolean simulationMode;
 
+    // Median filter for probe readings (MCP9600 gives single-sample spikes)
+    private static final int MEDIAN_WINDOW = 3;
+    private final double[] probeRawBuffer = new double[MEDIAN_WINDOW];
+    private int probeRawCount;
+
     public record TemperatureReading(Instant timestamp, double temperature) {}
 
     private final Map<String, CopyOnWriteArrayList<TemperatureReading>> history = new ConcurrentHashMap<>();
@@ -145,8 +150,12 @@ public class SmokerHardware {
         Instant now = Instant.now();
         var temps = new java.util.LinkedHashMap<String, Double>();
         if (hardwareAvailable) {
-            double probeTemp = mcp9600.getHotJunctionTemperature();
+            double probeRaw = mcp9600.getHotJunctionTemperature();
+            double probeTemp = medianFilter(probeRaw);
             double chipTemp = mcp9600.getColdJunctionTemperature();
+            if (Math.abs(probeRaw - probeTemp) > 5.0) {
+                LOG.warning("Probe spike filtered: raw=%.1f, median=%.1f".formatted(probeRaw, probeTemp));
+            }
             addReading(PROBE, new TemperatureReading(now, probeTemp));
             addReading(CHIP, new TemperatureReading(now, chipTemp));
             temps.put(PROBE, probeTemp);
@@ -316,6 +325,9 @@ public class SmokerHardware {
             meaterClient.addListener(new MeaterCloudListener() {
                 @Override
                 public void onDevicesUpdated(List<MeaterDevice> devices) {
+                    if (!devices.isEmpty()) {
+                        LOG.info("Meater Cloud: %d device(s) active".formatted(devices.size()));
+                    }
                     for (int i = 0; i < devices.size(); i++) {
                         MeaterDevice dev = devices.get(i);
                         int num = i + 1;
@@ -332,11 +344,20 @@ public class SmokerHardware {
                 @Override
                 public void onError(Exception error) {
                     LOG.log(Level.WARNING, "Meater Cloud poll error", error);
+                    if (!meaterClient.isAuthenticated()) {
+                        LOG.info("Meater Cloud: token expired, re-authenticating...");
+                        try {
+                            meaterClient.login(email, password);
+                            LOG.info("Meater Cloud: re-authenticated successfully");
+                        } catch (Exception e) {
+                            LOG.log(Level.WARNING, "Meater Cloud re-authentication failed", e);
+                        }
+                    }
                 }
             });
-            meaterClient.startPolling(30);
+            meaterClient.startPolling(120);
             meaterAvailable = true;
-            LOG.info("Meater Cloud connected, polling every 30s");
+            LOG.info("Meater Cloud connected, polling every 2 minutes");
         } catch (Throwable e) {
             LOG.log(Level.WARNING, "Meater Cloud connection failed", e);
         } finally {
@@ -557,6 +578,23 @@ public class SmokerHardware {
     }
 
     /**
+     * Median-of-3 filter for probe readings.
+     * Buffers raw values and returns the median, eliminating single-sample spikes.
+     */
+    private double medianFilter(double raw) {
+        int idx = probeRawCount % MEDIAN_WINDOW;
+        probeRawBuffer[idx] = raw;
+        probeRawCount++;
+        if (probeRawCount < MEDIAN_WINDOW) return raw; // Not enough samples yet
+        double a = probeRawBuffer[0], b = probeRawBuffer[1], c = probeRawBuffer[2];
+        // Median of three
+        if (a > b) { double t = a; a = b; b = t; }
+        if (b > c) { b = c; }
+        if (a > b) { b = a; }
+        return b;
+    }
+
+    /**
      * Append a TEMPS line to smoker.log with the given probe readings.
      */
     private void logTemps(Map<String, Double> readings) {
@@ -696,6 +734,35 @@ public class SmokerHardware {
             }
         }
         return null;
+    }
+
+    public record KeyedReading(String key, TemperatureReading reading) {}
+
+    /**
+     * Find the highest chamber temperature reading across iBBQ 1 and all Meater ambient sensors.
+     * Returns null if no readings are available.
+     */
+    public KeyedReading findHighestChamberReading() {
+        String bestKey = null;
+        TemperatureReading bestReading = null;
+
+        var ibbq = getLatestReading(IBBQ_1);
+        if (ibbq != null) {
+            bestKey = IBBQ_1;
+            bestReading = ibbq;
+        }
+
+        for (String key : getMeaterKeys()) {
+            if (!key.contains("(ambient)")) continue;
+            var reading = getLatestReading(key);
+            if (reading == null) continue;
+            if (bestReading == null || reading.temperature() > bestReading.temperature()) {
+                bestKey = key;
+                bestReading = reading;
+            }
+        }
+
+        return bestReading != null ? new KeyedReading(bestKey, bestReading) : null;
     }
 
     public String boardName() {

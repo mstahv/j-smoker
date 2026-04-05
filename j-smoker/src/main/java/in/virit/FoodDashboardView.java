@@ -20,6 +20,7 @@ import com.vaadin.flow.component.charts.model.YAxis;
 import com.vaadin.flow.component.html.Image;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import in.virit.color.NamedColor;
 import com.vaadin.flow.component.textfield.NumberField;
@@ -49,13 +50,15 @@ public class FoodDashboardView extends VVerticalLayout {
     };
 
     private final SmokerHardware hardware;
+    private final FoodTargets foodTargets;
     private final UiRefresher uiRefresher;
     private final Map<String, ProbeCard> probeCards = new LinkedHashMap<>();
     private final HorizontalFloatLayout cardsContainer = new HorizontalFloatLayout();
     private final Chart chart;
 
-    public FoodDashboardView(SmokerHardware hardware, UiRefresher uiRefresher) {
+    public FoodDashboardView(SmokerHardware hardware, FoodTargets foodTargets, UiRefresher uiRefresher) {
         this.hardware = hardware;
+        this.foodTargets = foodTargets;
         this.uiRefresher = uiRefresher;
 
         addProbeCard(SmokerHardware.IBBQ_2);
@@ -70,7 +73,7 @@ public class FoodDashboardView extends VVerticalLayout {
 
     private void addProbeCard(String probeKey) {
         if (!probeCards.containsKey(probeKey)) {
-            var card = new ProbeCard(probeKey);
+            var card = new ProbeCard(probeKey, foodTargets);
             probeCards.put(probeKey, card);
             cardsContainer.add(card);
         }
@@ -137,7 +140,7 @@ public class FoodDashboardView extends VVerticalLayout {
 
     @Override
     protected void onAttach(AttachEvent attachEvent) {
-        uiRefresher.register(attachEvent.getUI(), this::updateView);
+        uiRefresher.register(attachEvent.getUI(), events -> updateView());
     }
 
     @Override
@@ -157,13 +160,18 @@ public class FoodDashboardView extends VVerticalLayout {
         }
 
         private final String probeKey;
+        private final FoodTargets foodTargets;
         private final TemperatureBadge temperatureBadge = new TemperatureBadge();
+        private final RelativeTime timeLabel = new RelativeTime() {{
+            setStaleThreshold(java.time.Duration.ofMinutes(5));
+        }};
         private final NumberField targetField;
         private final VSpan progressLabel = new VSpan();
         private final Span etaLabel = new Span();
 
-        ProbeCard(String probeKey) {
+        ProbeCard(String probeKey, FoodTargets foodTargets) {
             this.probeKey = probeKey;
+            this.foodTargets = foodTargets;
             addThemeVariants(CardVariant.COVER_MEDIA);
             VImage thermoImage;
             if(probeKey.toLowerCase().contains("ibbq")) {
@@ -175,20 +183,29 @@ public class FoodDashboardView extends VVerticalLayout {
             setMedia(thermoImage);
             setTitle(probeKey);
 
-            setHeaderSuffix(temperatureBadge);
+            setHeaderSuffix(new HorizontalLayout(temperatureBadge, timeLabel) {{
+                setAlignItems(Alignment.CENTER);
+                setSpacing(false);
+                getStyle().set("gap", "var(--lumo-space-xs)");
+            }});
+            Double savedTarget = foodTargets.getTarget(probeKey);
             targetField = new NumberField("Target \u00B0C") {{
                 setMin(0);
                 setMax(120);
                 setStep(1);
-                setValue(85.0);
+                setValue(savedTarget != null ? savedTarget : 85.0);
                 setStepButtonsVisible(true);
                 setSuffixComponent(new Span("\u00B0C"));
                 setWidth("150px");
             }};
+            targetField.addValueChangeListener(e -> {
+                if (e.isFromClient()) {
+                    foodTargets.setTarget(probeKey, e.getValue());
+                }
+            });
 
             progressLabel.getStyle().setFontSize(AuraProps.FONT_SIZE_S.var());
             etaLabel.getStyle().setFontSize(AuraProps.FONT_SIZE_S.var());
-
 
             add(new VVerticalLayout(targetField, progressLabel, etaLabel).withPadding(false));
         }
@@ -198,6 +215,13 @@ public class FoodDashboardView extends VVerticalLayout {
         }
 
         void update(SmokerHardware hardware) {
+            // Sync target from shared state (may have been changed on another device)
+            Double shared = foodTargets.getTarget(probeKey);
+            Double local = targetField.getValue();
+            if (shared != null && !shared.equals(local)) {
+                targetField.setValue(shared);
+            }
+
             var reading = hardware.getLatestReading(probeKey);
             if (reading == null) {
                 temperatureBadge.setText("No data");
@@ -208,6 +232,7 @@ public class FoodDashboardView extends VVerticalLayout {
 
             double current = reading.temperature();
             temperatureBadge.setText("%.1f°".formatted(current));
+            timeLabel.setDatetime(reading.timestamp());
 
             Double target = targetField.getValue();
             if (target == null || target <= 0) {

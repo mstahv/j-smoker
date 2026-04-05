@@ -129,11 +129,11 @@ public class ActuatorsView extends AbstractDiagramView {
         }
         // blowerMode value change listener already syncs the diagram
 
-        onRefresh();
+        onRefresh(java.util.List.of());
     }
 
     @Override
-    protected void onRefresh() {
+    protected void onRefresh(java.util.List<AppEvent> events) {
         boolean autoActive = smokerHardware.isAutomaticControlActive();
         autoWarning.setVisible(autoActive);
         throttle.setEnabled(!autoActive);

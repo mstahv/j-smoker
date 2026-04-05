@@ -280,7 +280,7 @@ public class SimulationView extends AbstractDiagramView {
     }
 
     @Override
-    protected void onRefresh() {
+    protected void onRefresh(java.util.List<AppEvent> events) {
         updateStatus();
     }
 }

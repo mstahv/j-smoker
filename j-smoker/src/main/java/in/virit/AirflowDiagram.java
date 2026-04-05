@@ -80,8 +80,7 @@ class AirflowDiagram extends VSvg {
 
     AirflowDiagram() {
         super(0, FOOD_Y - ROOF_H - 5, 320, FIRE_Y + FIRE_H + 20 - (FOOD_Y - ROOF_H - 5));
-        setWidthFull();
-        getStyle().set("max-width", "450px");
+        setWidth("450px");
 
         // ── fire chamber ──
         var fireOuter = rect(FIRE_X, FIRE_Y, FIRE_W, FIRE_H, 4)
