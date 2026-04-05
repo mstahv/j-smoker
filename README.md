@@ -15,9 +15,27 @@ J-Smoker is a Java application designed to automate temperature control for smok
 
 **Note, if you want to re-build your own system based on this, you can probably quite easily change the attached electronics.*
 
-The actuators can be used manually via web/PWA appo, but as the automation developes, it hopefully eliminates the need for manual valve adjustments and provides more consistent smoking temperatures, making the smoking process less stressful and more enjoyable.
+The actuators can be used manually via the web/PWA app, but as the automation develops, it hopefully eliminates the need for manual valve adjustments and provides more consistent smoking temperatures, making the smoking process less stressful and more enjoyable.
 
-Dashboard and for temperatures and progress of the food.
+## Screenshots
+
+### Home screen with airflow diagram, sparklines, and system monitor
+
+| Desktop | Mobile |
+|---------|--------|
+| ![Home screen on desktop](home-screen-desktop.png) | ![Home screen on mobile](home-screen-ios.png) |
+
+### Automatic temperature control (mobile)
+
+![Automation view on iOS](automation-ios.png)
+
+### Food dashboard with target tracking and ETA
+
+![Food dashboard](food-dashboard.PNG)
+
+### Simulation mode for testing control logic
+
+![Simulation view](simulation-desktop.png)
 
 ## 🔥 Features
 
