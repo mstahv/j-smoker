@@ -23,7 +23,7 @@ public class MainView extends AbstractDiagramView {
 
         add(new DiagramViewInfo(
                 new RichText().withMarkDown("""
-                    Wellcome to J-Smoker, hello Frank! Powered by Pi4J, Vaadin, Quarkus.
+                    Welcome to J-Smoker! Powered by Pi4J, Vaadin, Quarkus.
                     [Source code](https://github.com/mstahv/j-smoker).
                     """),
                 new Paragraph("Running on: " + smokerHardware.boardName()))
