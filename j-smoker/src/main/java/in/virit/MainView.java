@@ -2,10 +2,13 @@ package in.virit;
 
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.router.Route;
 import org.vaadin.firitin.appframework.MenuItem;
 import org.vaadin.firitin.components.RichText;
@@ -18,7 +21,7 @@ public class MainView extends AbstractDiagramView {
 
     private final SystemMonitor systemMonitor = new SystemMonitor();
 
-    public MainView(SmokerHardware smokerHardware, UiRefresher uiRefresher) {
+    public MainView(SmokerHardware smokerHardware, UiRefresher uiRefresher, SystemControl systemControl) {
         super(smokerHardware, uiRefresher);
 
         add(new DiagramViewInfo(
@@ -29,6 +32,7 @@ public class MainView extends AbstractDiagramView {
                 new Paragraph("Running on: " + smokerHardware.boardName()))
         );
         add(systemMonitor);
+        add(new SystemActions(systemControl));
         updateDiagram();
         systemMonitor.update();
     }
@@ -37,6 +41,42 @@ public class MainView extends AbstractDiagramView {
     protected void onRefresh(java.util.List<AppEvent> events) {
         updateDiagram();
         systemMonitor.update();
+    }
+
+    static class SystemActions extends Div {
+
+        SystemActions(SystemControl systemControl) {
+            add(new H4("System"));
+
+            var rebootButton = new Button("Reboot", VaadinIcon.REFRESH.create(), e -> {
+                var dialog = new ConfirmDialog(
+                        "Reboot system?",
+                        "The smoker controller will restart. This takes about a minute.",
+                        "Reboot", confirm -> {
+                    systemControl.reboot();
+                    Notification.show("Rebooting...");
+                });
+                dialog.setCancelable(true);
+                dialog.open();
+            });
+            rebootButton.addThemeVariants(ButtonVariant.LUMO_SMALL);
+
+            var shutdownButton = new Button("Shutdown", VaadinIcon.POWER_OFF.create(), e -> {
+                var dialog = new ConfirmDialog(
+                        "Shut down system?",
+                        "The Raspberry Pi will power off. You will need physical access to restart it.",
+                        "Shut down", confirm -> {
+                    systemControl.shutdown();
+                    Notification.show("Shutting down...");
+                });
+                dialog.setCancelable(true);
+                dialog.setConfirmButtonTheme("error primary");
+                dialog.open();
+            });
+            shutdownButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_ERROR);
+
+            add(new HorizontalLayout(rebootButton, shutdownButton));
+        }
     }
 
     static class SystemMonitor extends Div {
