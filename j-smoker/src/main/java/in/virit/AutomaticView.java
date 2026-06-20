@@ -10,6 +10,7 @@ import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.NumberField;
+import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.Route;
 import in.virit.color.Color;
 import in.virit.color.NamedColor;
@@ -21,8 +22,6 @@ import org.vaadin.firitin.util.style.VaadinCssProps;
 @MenuItem(icon = VaadinIcon.MAGIC)
 public class AutomaticView extends AbstractDiagramView {
 
-    private final SmokerController controller;
-
     private final NumberField setpointField = new NumberField("Target temperature (°C)");
     private final Button startStopButton = new Button();
     private final Select<SmokerController.State> stateSelect = new Select<>();
@@ -32,8 +31,7 @@ public class AutomaticView extends AbstractDiagramView {
     private final PidDiagnostics pidDiagnostics = new PidDiagnostics();
 
     public AutomaticView(SmokerController controller, SmokerHardware smokerHardware, UiRefresher uiRefresher) {
-        super(smokerHardware, uiRefresher);
-        this.controller = controller;
+        super(smokerHardware, uiRefresher, controller);
 
         add(new DiagramViewInfo("Set or configure automation, the does best effort to maintain target temperature" +
                 "by controlling the airflow."));
@@ -44,6 +42,7 @@ public class AutomaticView extends AbstractDiagramView {
         setpointField.setValue(controller.getSetpoint());
         setpointField.setSuffixComponent(new Span("°C"));
         setpointField.setStepButtonsVisible(true);
+        setpointField.setValueChangeMode(ValueChangeMode.EAGER);
         setpointField.addValueChangeListener(e -> {
             if (e.getValue() != null) {
                 controller.setSetpoint(e.getValue());

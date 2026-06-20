@@ -25,6 +25,7 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import in.virit.color.NamedColor;
 import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.shared.Registration;
 import org.vaadin.firitin.appframework.MenuItem;
 import org.vaadin.firitin.components.html.VImage;
 import org.vaadin.firitin.components.html.VSpan;
@@ -138,14 +139,19 @@ public class FoodDashboardView extends VVerticalLayout {
         chart.drawChart();
     }
 
+    private Registration refresherRegistration;
+
     @Override
     protected void onAttach(AttachEvent attachEvent) {
-        uiRefresher.register(attachEvent.getUI(), events -> updateView());
+        refresherRegistration = uiRefresher.register(attachEvent.getUI(), events -> updateView());
     }
 
     @Override
     protected void onDetach(DetachEvent detachEvent) {
-        uiRefresher.unregister(detachEvent.getUI());
+        if (refresherRegistration != null) {
+            refresherRegistration.remove();
+            refresherRegistration = null;
+        }
     }
 
     static class ProbeCard extends Card {

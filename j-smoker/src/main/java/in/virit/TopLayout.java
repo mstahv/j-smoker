@@ -11,6 +11,13 @@ import org.vaadin.firitin.appframework.MainLayout;
 @Layout
 @StyleSheet(Aura.STYLESHEET)
 public class TopLayout extends MainLayout {
+
+    private final UiRefresher uiRefresher;
+
+    public TopLayout(UiRefresher uiRefresher) {
+        this.uiRefresher = uiRefresher;
+    }
+
     @Override
     protected Object getDrawerHeader() {
         return new Image("logo.svg", "J-Smoker"){{
@@ -33,5 +40,13 @@ public class TopLayout extends MainLayout {
         getStyle().set("--vaadin-slider-thumb-height", "2em");
         getStyle().set("--vaadin-slider-thumb-width", "2em");
         attachEvent.getUI().addClassName("aura-accent-purple");
+
+        // addToNavbar (unlike addNavbarHelper) survives view navigation
+        if (statusIndicator == null) {
+            statusIndicator = new ServerStatusIndicator(uiRefresher);
+            addToNavbar(statusIndicator);
+        }
     }
+
+    private ServerStatusIndicator statusIndicator;
 }

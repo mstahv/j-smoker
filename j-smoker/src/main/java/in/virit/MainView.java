@@ -21,8 +21,8 @@ public class MainView extends AbstractDiagramView {
 
     private final SystemMonitor systemMonitor = new SystemMonitor();
 
-    public MainView(SmokerHardware smokerHardware, UiRefresher uiRefresher, SystemControl systemControl) {
-        super(smokerHardware, uiRefresher);
+    public MainView(SmokerHardware smokerHardware, UiRefresher uiRefresher, SystemControl systemControl, SmokerController controller) {
+        super(smokerHardware, uiRefresher, controller);
 
         add(new DiagramViewInfo(
                 new RichText().withMarkDown("""

@@ -16,6 +16,7 @@ import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.dom.Style;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.shared.Registration;
 import in.virit.SmokerHardware.TemperatureReading;
 import org.vaadin.firitin.appframework.MenuItem;
 import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
@@ -137,12 +138,17 @@ public class ThermometersView extends VVerticalLayout {
         if (smokerHardware.isDevMode()) {
             Notification.show("Running in dev mode — displaying fake data", 5000, Notification.Position.BOTTOM_START);
         }
-        uiRefresher.register(attachEvent.getUI(), events -> updateReadings());
+        refresherRegistration = uiRefresher.register(attachEvent.getUI(), events -> updateReadings());
     }
+
+    private Registration refresherRegistration;
 
     @Override
     protected void onDetach(DetachEvent detachEvent) {
-        uiRefresher.unregister(detachEvent.getUI());
+        if (refresherRegistration != null) {
+            refresherRegistration.remove();
+            refresherRegistration = null;
+        }
     }
 
     static class ProbeDisplay extends Card {

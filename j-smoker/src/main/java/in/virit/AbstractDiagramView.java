@@ -9,6 +9,7 @@ import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.dom.Style;
+import com.vaadin.flow.shared.Registration;
 import in.virit.color.NamedColor;
 import org.vaadin.firitin.components.orderedlayout.VVerticalLayout;
 import org.vaadin.firitin.layouts.HorizontalFloatLayout;
@@ -34,6 +35,7 @@ public abstract class AbstractDiagramView extends VVerticalLayout {
     protected final AirflowDiagram diagram = new AirflowDiagram();
     protected final SmokerHardware smokerHardware;
     protected final UiRefresher uiRefresher;
+    protected final SmokerController controller;
 
     private final SvgSparkLine fireSparkLine = new SvgSparkLine(140, 60){{
         setWidthFull();
@@ -45,9 +47,10 @@ public abstract class AbstractDiagramView extends VVerticalLayout {
         setWidthFull();
     }};
 
-    protected AbstractDiagramView(SmokerHardware smokerHardware, UiRefresher uiRefresher) {
+    protected AbstractDiagramView(SmokerHardware smokerHardware, UiRefresher uiRefresher, SmokerController controller) {
         this.smokerHardware = smokerHardware;
         this.uiRefresher = uiRefresher;
+        this.controller = controller;
         getStyle().setPosition(Style.Position.RELATIVE);
 
         fireSparkLine.setLineColor(NamedColor.FIREBRICK);
@@ -121,6 +124,12 @@ public abstract class AbstractDiagramView extends VVerticalLayout {
         var ibbq1History = filterWindow(smokerHardware.getHistory(SmokerHardware.IBBQ_1), windowStart);
         chamberSparkLine.setXRange(windowStart, now);
         chamberSparkLine.setData(toDataPoints(ibbq1History));
+        // Target chamber temperature as a reference line (only while the controller
+        // is running). Reference lines persist across draws, so clear first.
+        chamberSparkLine.clearReferenceLines();
+        if (controller.getState() != SmokerController.State.OFF) {
+            chamberSparkLine.addReferenceLine(controller.getSetpoint(), NamedColor.GRAY, "Tlo");
+        }
         for (String key : smokerHardware.getMeaterKeys()) {
             if (!key.contains("(ambient)")) continue;
             var meaterHistory = filterWindow(smokerHardware.getHistory(key), windowStart);
@@ -191,14 +200,19 @@ public abstract class AbstractDiagramView extends VVerticalLayout {
      */
     protected abstract void onRefresh(List<AppEvent> events);
 
+    private Registration refresherRegistration;
+
     @Override
     protected void onAttach(AttachEvent attachEvent) {
-        uiRefresher.register(attachEvent.getUI(), this::onRefresh);
+        refresherRegistration = uiRefresher.register(attachEvent.getUI(), this::onRefresh);
     }
 
     @Override
     protected void onDetach(DetachEvent detachEvent) {
-        uiRefresher.unregister(detachEvent.getUI());
+        if (refresherRegistration != null) {
+            refresherRegistration.remove();
+            refresherRegistration = null;
+        }
     }
 
     /**

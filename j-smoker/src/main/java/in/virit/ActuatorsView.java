@@ -24,8 +24,8 @@ public class ActuatorsView extends AbstractDiagramView {
     private final RadioButtonGroup<String> blowerMode;
     private final NumberSlider<Integer> blowerDuty;
 
-    public ActuatorsView(SmokerHardware smokerHardware, UiRefresher uiRefresher) {
-        super(smokerHardware, uiRefresher);
+    public ActuatorsView(SmokerHardware smokerHardware, UiRefresher uiRefresher, SmokerController controller) {
+        super(smokerHardware, uiRefresher, controller);
 
         add(new DiagramViewInfo("Modify the state of actuators, either via diagram or through form controls."));
 

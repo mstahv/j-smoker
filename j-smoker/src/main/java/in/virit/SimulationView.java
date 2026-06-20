@@ -24,8 +24,6 @@ import org.vaadin.firitin.layouts.HorizontalFloatLayout;
 @MenuItem(icon = VaadinIcon.FLASK, order = MenuItem.END)
 public class SimulationView extends AbstractDiagramView {
 
-    private final SmokerController controller;
-
     // Temperature injection controls
     private final NumberField chamberTempField = new NumberField("Chamber temperature (°C)");
     private final NumberField fireTempField = new NumberField("Fire box temperature (°C)");
@@ -54,8 +52,7 @@ public class SimulationView extends AbstractDiagramView {
     private final NumberField simSpeedField = new NumberField("Time acceleration");
 
     public SimulationView(SmokerHardware hardware, SmokerController controller, UiRefresher uiRefresher) {
-        super(hardware, uiRefresher);
-        this.controller = controller;
+        super(hardware, uiRefresher, controller);
 
         add(new DiagramViewInfo("Use this view to test/play with the automation logic."));
 
