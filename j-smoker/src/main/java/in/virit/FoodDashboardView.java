@@ -2,6 +2,7 @@ package in.virit;
 
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.DetachEvent;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.Unit;
 import com.vaadin.flow.component.badge.Badge;
 import com.vaadin.flow.component.card.Card;
@@ -93,8 +94,12 @@ public class FoodDashboardView extends VVerticalLayout {
         Configuration conf = chart.getConfiguration();
         conf.setTitle("Food Temperature History");
         Time time = new Time();
-        // 🤦‍♂️
-        //time.setTimezone(TimeZone.getDefault().toZoneId().toString());
+        // Render the datetime axis in the browser's timezone, not the server's
+        // (the Pi typically runs in UTC).
+        var clientDetails = UI.getCurrent().getPage().getExtendedClientDetails();
+        if (clientDetails != null && clientDetails.getTimeZoneId() != null) {
+            time.setTimezone(clientDetails.getTimeZoneId());
+        }
         conf.setTime(time);
         conf.getxAxis().setType(AxisType.DATETIME);
         conf.getxAxis().setTitle("Time");
@@ -143,7 +148,7 @@ public class FoodDashboardView extends VVerticalLayout {
 
     @Override
     protected void onAttach(AttachEvent attachEvent) {
-        refresherRegistration = uiRefresher.register(attachEvent.getUI(), events -> updateView());
+        refresherRegistration = uiRefresher.subscribe(attachEvent.getUI(), events -> updateView());
     }
 
     @Override

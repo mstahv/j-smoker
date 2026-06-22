@@ -3,11 +3,13 @@ package in.virit;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.Unit;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.page.PageVisibility;
 import com.vaadin.flow.dom.Style;
 import com.vaadin.flow.shared.Registration;
 import in.virit.color.NamedColor;
@@ -128,7 +130,7 @@ public abstract class AbstractDiagramView extends VVerticalLayout {
         // is running). Reference lines persist across draws, so clear first.
         chamberSparkLine.clearReferenceLines();
         if (controller.getState() != SmokerController.State.OFF) {
-            chamberSparkLine.addReferenceLine(controller.getSetpoint(), NamedColor.GRAY, "Tlo");
+            //chamberSparkLine.addReferenceLine(controller.getSetpoint(), NamedColor.GRAY, "T");
         }
         for (String key : smokerHardware.getMeaterKeys()) {
             if (!key.contains("(ambient)")) continue;
@@ -204,7 +206,7 @@ public abstract class AbstractDiagramView extends VVerticalLayout {
 
     @Override
     protected void onAttach(AttachEvent attachEvent) {
-        refresherRegistration = uiRefresher.register(attachEvent.getUI(), this::onRefresh);
+        refresherRegistration = uiRefresher.subscribe(attachEvent.getUI(), this::onRefresh);
     }
 
     @Override

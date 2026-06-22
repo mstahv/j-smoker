@@ -138,7 +138,7 @@ public class ThermometersView extends VVerticalLayout {
         if (smokerHardware.isDevMode()) {
             Notification.show("Running in dev mode — displaying fake data", 5000, Notification.Position.BOTTOM_START);
         }
-        refresherRegistration = uiRefresher.register(attachEvent.getUI(), events -> updateReadings());
+        refresherRegistration = uiRefresher.subscribe(attachEvent.getUI(), events -> updateReadings());
     }
 
     private Registration refresherRegistration;

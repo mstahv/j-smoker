@@ -48,7 +48,7 @@ public class ServerStatusIndicator extends Span {
     @Override
     protected void onAttach(AttachEvent attachEvent) {
         super.onAttach(attachEvent);
-        refresherRegistration = uiRefresher.register(attachEvent.getUI(), events -> beat());
+        refresherRegistration = uiRefresher.subscribe(attachEvent.getUI(), events -> beat());
         installClientLogic();
     }
 
